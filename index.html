@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-180.png">
 
-    <script src="html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         /* ===== IMPRESIÓN NATIVA (SISTEMA WINDOWS) ===== */
         @media print {
@@ -2627,34 +2627,89 @@
                 avisoDiv.style.display = 'none';
             }
 
-            const el = document.getElementById('ticket-container');
-            el.style.position = 'static';
-            el.style.display = 'block';
+            // ===== GENERACIÓN DE PDF REAL (texto vectorial, no imagen) =====
+            // Se usa jsPDF directamente en vez de capturar la pantalla como imagen
+            // y en vez de depender del diálogo de impresión del sistema (que en
+            // algunos dispositivos Android no tiene un servicio de impresión disponible).
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+                const cx = 40; // centro de la página (80mm de ancho)
+                let y = 8;
 
-            if (typeof Android !== 'undefined' && Android.guardarArchivo) {
-                // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
-                const opt = {
-                    margin:       2,
-                    filename:     `Recibo_${r.nombre}_${num}.pdf`,
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
-                    jsPDF:        { unit: 'mm', format: [80, 200], orientation: 'portrait' }
+                const linea = (texto, opts = {}) => {
+                    const { size = 9, bold = false, center = true, gap = 5 } = opts;
+                    doc.setFont('courier', bold ? 'bold' : 'normal');
+                    doc.setFontSize(size);
+                    if (center) doc.text(String(texto), cx, y, { align: 'center' });
+                    else doc.text(String(texto), 5, y);
+                    y += gap;
                 };
-                html2pdf().set(opt).from(el).output('datauristring').then(function (pdfBase64) {
-                    Android.guardarArchivo(pdfBase64, `Recibo_${num}.pdf`, "application/pdf");
-                    el.style.position = 'absolute';
-                    el.style.left = '-9999px';
-                    avisoDiv.style.display = 'none';
-                });
-            } else {
-                // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
-                document.title = `Recibo_${num}`;
-                imprimirConSistema('ticket-container').then(() => {
-                    el.style.position = 'absolute';
-                    el.style.left = '-9999px';
-                    avisoDiv.style.display = 'none';
-                    document.title = 'ACOMAACAP v9';
-                });
+                const separador = () => {
+                    doc.setLineWidth(0.1);
+                    doc.line(5, y - 3.5, 75, y - 3.5);
+                    y += 1.5;
+                };
+
+                linea('ACOMAACAP', { size: 13, bold: true, gap: 5 });
+                linea('Cantón Las Piletas, Santa Ana Este', { size: 7.5, gap: 4 });
+                linea('Distrito de Coatepeque, Santa Ana', { size: 7.5, gap: 5 });
+                if (pagado) {
+                    linea('*** RECIBO CANCELADO ***', { size: 10, bold: true, gap: 5 });
+                }
+                separador();
+                linea('RECIBO DE AGUA', { size: 9.5, bold: true, gap: 4.5 });
+                linea(`#: ${num}  |  ${r.fecha}`, { size: 8, gap: 4.5 });
+                if (pagado) {
+                    linea(`Pagado: ${(r.fechaPago || r.fecha)}${r.horaPago ? ' ' + r.horaPago.substring(0,5) : ''}`, { size: 8, gap: 4.5 });
+                }
+                linea(`MES: ${(r.mesFacturado || '').toUpperCase()}`, { size: 9, bold: true, gap: 5 });
+                separador();
+                linea(`Cliente: ${r.nombre}`, { size: 8.5, center: false, gap: 4.5 });
+                linea(`Ubicacion: ${r.direccion || '---'}`, { size: 8.5, center: false, gap: 4.5 });
+                linea(`Contador: ${r.contador}`, { size: 8.5, center: false, gap: 5 });
+                separador();
+                linea(`Periodo: ${(r.periodoDesde || '---')} al ${(r.periodoHasta || r.fecha)}`, { size: 8, center: false, gap: 4.5 });
+                linea(`Lect. Actual:   ${r.lecturaActual}`, { size: 8, center: false, gap: 4.5 });
+                linea(`Lect. Anterior: ${r.lecturaAnt}`, { size: 8, center: false, gap: 4.5 });
+                linea(`Consumo:        ${r.consumo} m3`, { size: 8, center: false, gap: 4.5 });
+                linea(`Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}`, { size: 8, center: false, gap: 5 });
+                separador();
+                linea(`Subtotal:                $${montoMes.toFixed(2)}`, { size: 8.5, center: false, gap: 4.5 });
+                linea(`${pagado ? 'Saldo Incluido:' : 'Saldo Ant/Mora:'}          $${deudaPendiente.toFixed(2)}`, { size: 8.5, center: false, gap: extra > 0 || (deudaPendiente > 0 && r.moraDetalle) ? 4.5 : 5 });
+                if (deudaPendiente > 0 && r.moraDetalle) {
+                    linea(`Detalle: ${r.moraDetalle}`, { size: 7.5, center: false, gap: 4.5 });
+                }
+                if (extra > 0) {
+                    linea(`Extra: $${extra.toFixed(2)}${r.extraDetalle ? ' (' + r.extraDetalle + ')' : ''}`, { size: 8, center: false, gap: 5 });
+                }
+                separador();
+                linea(`${pagado ? 'TOTAL PAGADO' : 'TOTAL'}: $${granTotal.toFixed(2)}`, { size: 12, bold: true, gap: 7 });
+
+                if (pagado) {
+                    linea('¡GRACIAS POR SU PAGO!', { size: 8.5, bold: true, gap: 4.5 });
+                    linea('Conserve este comprobante como', { size: 7, gap: 3.8 });
+                    linea('constancia de su pago.', { size: 7, gap: 4 });
+                } else {
+                    if (deudaPendiente > 0) {
+                        linea('AVISO: Saldo en mora. Favor', { size: 7.5, bold: true, gap: 3.8 });
+                        linea('cancelar para evitar cortes.', { size: 7.5, bold: true, gap: 4.5 });
+                    }
+                    linea('Recuerde que tiene 7 dias habiles', { size: 7, gap: 3.8 });
+                    linea('para pagar tras haber sido entregada.', { size: 7, gap: 4 });
+                }
+
+                const filename = `Recibo_${(r.nombre || '').replace(/[^a-zA-Z0-9]+/g, '_')}_${num}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+                avisoDiv.style.display = 'none';
+            } catch (e) {
+                console.error('Error generando PDF:', e);
+                alert('⚠️ No se pudo generar el PDF: ' + e.message);
+                avisoDiv.style.display = 'none';
             }
         }
 
@@ -3245,8 +3300,19 @@
                 };
                 window.onafterprint = finalizar;
                 setTimeout(() => {
-                    window.print();
-                    setTimeout(finalizar, 800);
+                    try {
+                        if (typeof window.print === 'function') {
+                            window.print();
+                        } else {
+                            alert('⚠️ Este navegador no permite abrir el diálogo de impresión.');
+                        }
+                    } catch (e) {
+                        console.error('Error al imprimir:', e);
+                        alert('⚠️ No se pudo abrir el diálogo de impresión: ' + e.message);
+                    } finally {
+                        // Pase lo que pase, siempre se oculta el elemento y se libera la pantalla.
+                        setTimeout(finalizar, 800);
+                    }
                 }, 150);
             });
         }
