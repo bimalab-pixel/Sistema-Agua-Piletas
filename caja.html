@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Caja ACOMAACAP</title>
+
+    <!-- ===== PWA: Manifest e íconos ===== -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00796b">
+    <meta name="description" content="Módulo de Caja y Tesorería - ACOMAACAP Las Piletas">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Caja ACOMAACAP">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+
+    <script src="html2pdf.bundle.min.js"></script>
+    <style>
+        /* ===== IMPRESIÓN NATIVA (SISTEMA WINDOWS) ===== */
+        @media print {
+            body * { visibility: hidden !important; }
+            #reporte-container, #reporte-container *,
+            #ticket-temp-pdf, #ticket-temp-pdf * { visibility: visible !important; }
+            #reporte-container, #ticket-temp-pdf {
+                position: absolute !important;
+                left: 0 !important; top: 0 !important;
+            }
+        }
+        :root {
+            --primary: #00796b; /* Verde profesional */
+            --primary-dark: #004d40;
+            --secondary: #2e7d32; /* Ingresos */
+            --danger: #c62828;    /* Egresos */
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-main: #263238;
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 0;
+            background-color: var(--bg-color); color: var(--text-main);
+            padding-bottom: calc(85px + var(--safe-bottom));
+        }
+
+        header {
+            background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+            color: white; padding: 25px 15px 20px 15px; text-align: center;
+            border-bottom-left-radius: 24px; border-bottom-right-radius: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15); position: sticky; top: 0; z-index: 100;
+        }
+        header h1 { margin: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.9; font-size: 0.85rem; font-weight: 400; }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 20px 15px; }
+
+        /* Animaciones suaves */
+        .section { display: none; opacity: 0; transition: opacity 0.3s ease; }
+        .section.active { display: block; opacity: 1; animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .card {
+            background: var(--card-bg); padding: 20px; border-radius: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.04); margin-bottom: 15px; position: relative;
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+
+        .card-income { border-left: 5px solid var(--secondary); }
+        .card-expense { border-left: 5px solid var(--danger); }
+
+        .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .card-action { cursor: pointer; transition: transform 0.1s; text-align: center; padding: 25px 15px; }
+        .card-action:active { transform: scale(0.97); background: #fafafa; }
+
+        .card-icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+        .card-label { font-size: 0.95rem; color: #455a64; font-weight: 700; display: block; }
+
+        /* SALDO GRANDE */
+        .saldo-display {
+            text-align: center; padding: 30px 20px; background: white; border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,121,107,0.15); margin-bottom: 25px;
+            position: relative; overflow: hidden;
+        }
+        .saldo-titulo { font-size: 0.85rem; color: #78909c; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+        .saldo-valor { font-size: 3.8rem; font-weight: 800; color: var(--primary-dark); margin: 5px 0; letter-spacing: -2px; }
+
+        input, select {
+            width: 100%; padding: 12px; margin: 5px 0 15px 0;
+            border: 1px solid #cfd8dc; border-radius: 12px; font-size: 14px;
+            background: #fff; appearance: none; transition: border 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(0,121,107,0.1); }
+        label { font-weight: 700; color: #455a64; font-size: 0.85rem; margin-left: 2px; }
+
+        .btn {
+            width: 100%; padding: 18px; border: none; border-radius: 14px;
+            font-size: 1rem; font-weight: 700; cursor: pointer; color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-bottom: 12px; transition: transform 0.1s; -webkit-tap-highlight-color: transparent;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: linear-gradient(135deg, #00796b, #004d40); }
+        .btn-success { background: linear-gradient(135deg, #43a047, #2e7d32); }
+        .btn-danger { background: linear-gradient(135deg, #e53935, #c62828); }
+        .btn-bt { background: linear-gradient(135deg, #7e57c2, #5e35b1); }
+
+        /* TABLA DE ITEMS */
+        .items-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; margin-bottom: 15px; }
+        .items-table th { text-align: left; font-size: 0.75rem; color: #90a4ae; text-transform: uppercase; padding: 0 5px; }
+        .items-table td { vertical-align: middle; }
+        .items-table input { margin: 0; padding: 10px; font-size: 0.9rem; border: 1px solid #e0e0e0; }
+
+        .list-item {
+            background: white; padding: 18px; margin-bottom: 12px;
+            border-radius: 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.04);
+        }
+        .badge { padding: 5px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;}
+        .badge-in { background: #e8f5e9; color: #2e7d32; }
+        .badge-out { background: #ffebee; color: #c62828; }
+
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(255,255,255,0.98); backdrop-filter: blur(10px);
+            border-top: 1px solid #eee; display: flex; justify-content: space-around;
+            padding-top: 12px; padding-bottom: calc(12px + var(--safe-bottom)); z-index: 1000;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.03);
+        }
+        .nav-item { text-align: center; color: #b0bec5; font-size: 0.7rem; cursor: pointer; flex: 1; transition: color 0.2s; }
+        .nav-item.active { color: var(--primary); font-weight: 700; }
+        .nav-icon { font-size: 1.6rem; display: block; margin-bottom: 4px; }
+
+        .btn-add-item {
+            background: var(--primary); color: white; border: none; width: 32px; height: 32px;
+            border-radius: 50%; font-size: 1.4rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .btn-remove-item {
+            background: #ffebee; color: var(--danger); border: none; width: 28px; height: 28px;
+            border-radius: 50%; font-size: 1.1rem; cursor: pointer; display:flex; align-items:center; justify-content:center;
+        }
+
+        /* TICKET OCULTO */
+        #ticket-container {
+            position: absolute; left: -9999px; top: 0; width: 70mm;
+            padding: 5px; background: white; color: black;
+            font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.2;
+        }
+        .ticket-header { text-align: center; border-bottom: 1px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
+        .ticket-total { border-top: 1px dashed black; padding-top: 10px; margin-top: 10px; font-weight: bold; font-size: 14px; text-align: right; }
+        .ticket-sign { margin-top: 40px; display: flex; justify-content: space-between; gap: 10px;}
+        .sign-line { border-top: 1px solid black; padding-top: 5px; flex: 1; font-size: 9px; text-align: center; }
+    </style>
+</head>
+<body>
+<div id="login-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); z-index: 2000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; text-align: center;">
+
+    <div style="margin-bottom: 30px;">
+        <h1 style="color: var(--primary-dark); font-size: 2.5rem; margin: 0;">ACOMAACAP</h1>
+        <p style="color: #666; font-size: 1.1rem; margin-top: 5px;">Caja Chica</p>
+    </div>
+
+    <div style="background: white; padding: 30px 25px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align:left;">
+
+        <label for="login-email">Correo</label>
+        <input type="email" id="login-email" placeholder="usuario@acomaacap.local" autocomplete="username" style="margin-bottom: 15px; font-size: 16px; padding: 15px; border: 2px solid #ddd; width:100%;">
+        <label for="login-pass">Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" style="margin-bottom: 15px; font-size: 16px; padding: 15px; border: 2px solid #ddd; width:100%;">
+        <div id="login-error" style="color:var(--danger); font-size:0.85rem; margin-bottom: 10px; display:none;"></div>
+
+        <button class="btn btn-primary" id="btn-login" onclick="iniciarSesion()" style="margin: 0; padding: 18px;">
+            🔓 Entrar al Sistema
+        </button>
+        <button class="btn" onclick="window.location.href = 'index.html';" style="margin-top: 15px; padding: 10px; background-color: #e0e0e0; color: #424242;">
+            ⬅️ Volver al Sistema de Agua
+        </button>
+
+        <p style="margin-top: 20px; font-size: 0.8rem; color: #999; text-align:center;">Usa la misma cuenta con la que entras al Sistema de Agua.</p>
+    </div>
+</div>
+
+<div id="app-content" style="display:none;">
+
+    <header>
+        <h1>ACOMAACAP</h1>
+        <p>📦 Contabilidad General</p>
+        <p id="sync-status" style="font-size:0.75rem; margin-top:4px; opacity:0.85;">🔄 Conectando...</p>
+    </header>
+
+    <div class="container">
+
+        <div id="dashboard" class="section active">
+            <div class="card" style="margin-bottom: 15px; padding: 0;">
+                <div class="list-item" onclick="window.location.href = 'index.html';" style="background: var(--primary); color: white; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                    <span style="font-size: 2.2rem; margin-right: 15px;">💧</span>
+                    <span style="font-size: 1.2rem; font-weight: bold;">IR A SISTEMA DE AGUA</span>
+                </div>
+            </div>
+            <div class="saldo-display">
+                <div class="saldo-titulo">Saldo Disponible</div>
+                <div class="saldo-valor" id="dash-saldo">$0.00</div>
+                <div id="dash-admin-label" style="font-size: 0.8rem; color: #90a4ae; margin-top: 5px;">Admin: ACOMAACAP</div>
+            </div>
+
+            <div class="dash-grid">
+                <div class="card card-action card-income" onclick="mostrarSeccion('ingreso')">
+                    <span class="card-icon">💰</span>
+                    <span class="card-label">Registrar Entrada</span>
+                </div>
+                <div class="card card-action card-expense" onclick="mostrarSeccion('gasto')">
+                    <span class="card-icon">🧾</span>
+                    <span class="card-label">Registrar Vale</span>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom:15px; color:#546e7a;">Resumen del Mes</h3>
+            <div style="display:flex; gap:15px;">
+                <div class="card" onclick="irAHistorial('entrada')" style="flex:1; background:#f1f8e9; text-align:center; padding:15px; border:1px solid #c5e1a5; cursor: pointer; transition: transform 0.1s;">
+                    <span style="font-size:0.75rem; color:#558b2f; font-weight:700; text-transform:uppercase;">Ingresos</span><br>
+                    <strong style="font-size:1.4rem; color:#2e7d32;" id="dash-total-in">$0.00</strong>
+                    <div style="font-size:0.7rem; color:#558b2f; margin-top:5px;">Ver detalles 📄</div>
+                </div>
+
+                <div class="card" onclick="irAHistorial('salida')" style="flex:1; background:#ffebee; text-align:center; padding:15px; border:1px solid #ffcdd2; cursor: pointer; transition: transform 0.1s;">
+                    <span style="font-size:0.75rem; color:#c62828; font-weight:700; text-transform:uppercase;">Egresos</span><br>
+                    <strong style="font-size:1.4rem; color:#c62828;" id="dash-total-out">$0.00</strong>
+                    <div style="font-size:0.7rem; color:#c62828; margin-top:5px;">Ver detalles 📄</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ingreso" class="section">
+            <h2 style="color: var(--secondary);">💰 Entrada de Dinero</h2>
+            <div class="card card-income">
+                <label>Fuente / Origen</label>
+                <input type="text" id="in-fuente" placeholder="Ej: Ventas, Reposición Banco">
+
+                <label>Monto a Ingresar ($)</label>
+                <input type="number" id="in-monto" step="0.01" placeholder="0.00" style="font-size:1.5rem; font-weight:bold; color:var(--secondary);">
+
+                <label>Nota / Detalle</label>
+                <input type="text" id="in-notas" placeholder="Detalles adicionales...">
+
+                <button class="btn btn-success" onclick="guardarMovimiento('entrada')">💾 Guardar Ingreso</button>
+                <button class="btn btn-bt" style="background:#cfd8dc; color:#455a64; box-shadow:none;" onclick="mostrarSeccion('dashboard')">Cancelar</button>
+            </div>
+        </div>
+
+        <div id="gasto" class="section">
+            <h2 style="color: var(--danger);">🧾 Nuevo Vale de Caja</h2>
+            <div class="card card-expense">
+                <div style="background: #eceff1; padding: 12px; border-radius: 10px; margin-bottom: 20px; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.2rem;">👮‍♀️</span>
+                    <div>
+                        <span style="font-size:0.7rem; color:#78909c; font-weight:bold; text-transform:uppercase;">Entrega (Admin):</span><br>
+                        <strong id="lbl-admin-name" style="color:#37474f;">ACOMAACAP</strong>
+                    </div>
+                </div>
+
+                <label>Beneficiario (Quien recibe):</label>
+                <input type="text" id="out-recibe" placeholder="Nombre completo...">
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; margin-top:20px;">
+                    <label style="margin:0;">Detalle de Gastos</label>
+                    <button type="button" class="btn-add-item" onclick="agregarFilaItem()">+</button>
+                </div>
+
+                <table class="items-table">
+                    <thead>
+                    <tr>
+                        <th width="45%">Descripción</th>
+                        <th width="20%">Cant.</th>
+                        <th width="25%">Precio</th>
+                        <th width="10%"></th>
+                    </tr>
+                    </thead>
+                    <tbody id="items-container">
+                    </tbody>
+                </table>
+
+                <div style="text-align:right; margin: 25px 0; padding-top:15px; border-top:2px dashed #eceff1;">
+                    <span style="font-size:0.9rem; color:#90a4ae; font-weight:700;">TOTAL A ENTREGAR</span><br>
+                    <span id="out-total-display" style="font-size:2.5rem; font-weight:800; color:var(--danger);">$0.00</span>
+                </div>
+
+                <button class="btn btn-danger" onclick="guardarMovimiento('salida')">💾 Generar Vale</button>
+                <button class="btn btn-bt" style="background:#cfd8dc; color:#455a64; box-shadow:none;" onclick="mostrarSeccion('dashboard')">Cancelar</button>
+            </div>
+        </div>
+
+        <div id="historial" class="section">
+            <h2>📂 Historial</h2>
+
+            <div style="background:white; padding:15px; border-radius:12px; margin-bottom:15px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <div>
+                        <label style="font-size:0.7rem; color:#999;">AÑO</label>
+                        <select id="filtro-anio" onchange="renderHistorial()" style="margin:0; padding:8px;">
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.7rem; color:#999;">MES</label>
+                        <select id="filtro-mes" onchange="renderHistorial()" style="margin:0; padding:8px;">
+                            <option value="todos">Todos</option>
+                            <option value="0">Enero</option><option value="1">Febrero</option><option value="2">Marzo</option>
+                            <option value="3">Abril</option><option value="4">Mayo</option><option value="5">Junio</option>
+                            <option value="6">Julio</option><option value="7">Agosto</option><option value="8">Septiembre</option>
+                            <option value="9">Octubre</option><option value="10">Noviembre</option><option value="11">Diciembre</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div>
+                        <label style="font-size:0.7rem; color:#999;">DÍA</label>
+                        <select id="filtro-dia" onchange="renderHistorial()" style="margin:0; padding:8px;">
+                            <option value="todos">Todos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.7rem; color:#999;">TIPO</label>
+                        <select id="filtro-tipo" onchange="renderHistorial()" style="margin:0; padding:8px;">
+                            <option value="todos">Todos</option>
+                            <option value="entrada">Entradas</option>
+                            <option value="salida">Salidas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #cfd8dc;">
+                    <label style="font-size:0.8rem; color:#546e7a; font-weight:700; display:block; margin-bottom: 8px;">Generar Reporte PDF (Carta)</label>
+                    <button class="btn btn-primary" style="padding: 12px; margin-bottom: 8px;" onclick="generarReportePDF('anual')">📈 Reporte Anual</button>
+                    <button class="btn btn-primary" style="padding: 12px; margin-bottom: 8px;" onclick="generarReportePDF('mensual')">📅 Reporte Mensual</button>
+                    <button class="btn btn-primary" style="padding: 12px;" onclick="generarReportePDF('diario')">☀️ Reporte Diario</button>
+                </div>
+            </div>
+
+            <div id="historial-resumen" style="display:flex; gap:10px; margin-bottom:15px; background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eceff1;">
+                <div style="flex:1; text-align:center; border-right:1px solid #eee;">
+                    <span style="font-size:0.7rem; color:#558b2f; font-weight:700;">TOTAL FILTRADO (+)</span><br>
+                    <strong style="font-size:1.1rem; color:#2e7d32;" id="hist-total-in">$0.00</strong>
+                </div>
+                <div style="flex:1; text-align:center;">
+                    <span style="font-size:0.7rem; color:#c62828; font-weight:700;">TOTAL FILTRADO (-)</span><br>
+                    <strong style="font-size:1.1rem; color:#c62828;" id="hist-total-out">$0.00</strong>
+                </div>
+            </div>
+
+
+            <div id="lista-movimientos"></div>
+            <div id="historial-sentinel" style="text-align:center; padding:16px; color:#999; font-size:0.85rem;"></div>
+        </div>
+
+        <div id="ajustes" class="section">
+            <h2>⚙️ Ajustes</h2>
+
+            <div class="card">
+                <label>Administrador Actual</label>
+                <input type="text" id="conf-admin" value="ACOMAACAP">
+                <button class="btn btn-primary" onclick="guardarConfig()">Actualizar Nombre</button>
+            </div>
+
+            <div class="card card-income">
+                <h4 style="margin:0 0 15px 0;">📂 Respaldo de Datos</h4>
+                <button class="btn btn-success" onclick="descargarBackup()">📥 Guardar Copia (Descargar)</button>
+                <div style="margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                    <input type="file" id="input-restore" style="display:none" onchange="procesarRestauracion(this)">
+                    <button class="btn btn-bt" onclick="document.getElementById('input-restore').click()">📤 Cargar Copia (Restaurar)</button>
+                </div>
+            </div>
+
+            <div class="card card-expense">
+                <h4 style="margin:0 0 10px 0; color:var(--danger);">⚠️ Zona de Peligro</h4>
+                <p style="font-size:0.8rem; color:#666; margin-bottom:15px;">Si la aplicación falla o quieres empezar de cero.</p>
+                <button class="btn btn-danger" onclick="borrarTodo()">💣 BORRAR TODO Y REINICIAR</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item" onclick="window.location.href = 'index.html';"><span class="nav-icon">💧</span>Agua</div>
+        <div class="nav-item active" onclick="mostrarSeccion('dashboard')"><span class="nav-icon">🏠</span>Inicio</div>
+        <div class="nav-item" onclick="mostrarSeccion('ingreso')"><span class="nav-icon">💰</span>Entrada</div>
+        <div class="nav-item" onclick="mostrarSeccion('gasto')"><span class="nav-icon">🧾</span>Vale</div>
+        <div class="nav-item" onclick="mostrarSeccion('historial')"><span class="nav-icon">📂</span>Historial</div>
+        <div class="nav-item" onclick="mostrarSeccion('ajustes')"><span class="nav-icon">⚙️</span>Ajustes</div>
+    </div>
+
+    <div id="reporte-container" style="position: absolute; left: -9999px; top: 0; width: 210mm; padding: 15mm; background: white; color: black; font-family: 'Times New Roman', serif; font-size: 10pt; line-height: 1.4;">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="margin: 0; font-size: 16pt;">ACOMAACAP - Control de Caja Chica</h1>
+            <h2 style="margin: 5px 0 10px 0; font-size: 14pt; color: #333;" id="r-titulo">Reporte de Movimientos</h2>
+            <p style="margin: 0; font-size: 10pt; color: #666;" id="r-periodo">Período: </p>
+            <p style="margin: 5px 0 0 0; font-size: 9pt; color: #999;">Generado: <span id="r-fecha-gen"></span></p>
+        </div>
+
+        <div style="display: flex; justify-content: space-around; text-align: center; margin-bottom: 25px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+            <div style="flex: 1;"><strong style="color: #2e7d32;">INGRESOS TOTALES:</strong><br><span id="r-total-in" style="font-size: 14pt;">$0.00</span></div>
+            <div style="flex: 1;"><strong style="color: #c62828;">EGRESOS TOTALES:</strong><br><span id="r-total-out" style="font-size: 14pt;">$0.00</span></div>
+            <div style="flex: 1;"><strong style="color: #004d40;">SALDO NETO:</strong><br><span id="r-saldo-neto" style="font-size: 16pt;">$0.00</span></div>
+        </div>
+
+        <h3 style="margin-top: 0; font-size: 12pt; border-bottom: 1px solid #333; padding-bottom: 5px;">Detalle de Movimientos:</h3>
+
+        <table id="r-tabla-movimientos" style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+            <thead>
+            <tr style="background-color: #f0f0f0;">
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Fecha / Hora</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Tipo / Concepto</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Admin / Recibe</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Entrada ($)</th>
+                <th style="border: 1px solid #ddd; padding: 8px; text-align: right;">Salida ($)</th>
+            </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 50px; text-align: right; font-size: 9pt; color: #999;">
+            <p>Reporte generado por: <span id="r-admin-gen"></span></p>
+        </div>
+    </div>
+
+    <div id="ticket-container" style="position: absolute; left: -9999px; top: 0; width: 80mm; padding: 5mm; background: white; color: black; font-family: monospace; font-size: 9pt; line-height: 1.2;">
+
+        <div class="ticket-header" style="text-align: center; margin-bottom: 10px;">
+            <h3 style="margin:0;">ACOMAACAP</h3>
+            <p style="margin:0; font-size:10px;">CAJA CHICA</p>
+            <p style="margin:5px 0; font-weight:bold;">TICKET #: <span id="t-id">000</span></p>
+            <p style="margin:0;">Fecha: <span id="t-fecha-hora">--/--/-- --:--</span></p>
+        </div>
+
+        <div style="border-bottom: 1px dashed black; padding-bottom: 5px; margin-bottom: 5px;">
+            <p style="margin:2px 0;"><strong>TIPO:</strong> <span id="t-tipo">---</span></p>
+            <p style="margin:2px 0;"><strong>CONCEPTO:</strong> <span id="t-concepto">---</span></p>
+
+            <p style="margin:2px 0; margin-top:5px;"><strong>ENTREGA:</strong><br><span id="t-admin">---</span></p>
+            <p style="margin:2px 0; margin-top:5px;"><strong>RECIBE:</strong><br><span id="t-recibe">---</span></p>
+            <p style="margin:2px 0; margin-top:5px; font-size:10px; font-style:italic;" id="t-ref-container">Ref: <span id="t-ref"></span></p>
+        </div>
+
+        <div id="t-items-list" style="margin-bottom: 10px;">
+        </div>
+
+        <div style="border-top: 1px dashed black; padding-top: 5px;">
+            <div style="text-align: right; font-size: 11pt; font-weight: bold;">
+                TOTAL: <span id="t-total">$0.00</span>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 15px; font-size: 8pt;">
+            <p>¡Gracias por su gestión!</p>
+            <p style="font-style: italic;">Generado por el Sistema de Caja Chica</p>
+        </div>
+    </div>
+
+    <script>
+        // --- LÓGICA SEGURA ---
+        let movimientos = [];
+        let config = { admin: 'ACOMAACAP' };
+
+        try {
+            const movsGuardados = localStorage.getItem('caja_movimientos');
+            const confGuardada = localStorage.getItem('caja_config');
+
+            if (movsGuardados) movimientos = JSON.parse(movsGuardados);
+
+            if (confGuardada) {
+                let tempConf = JSON.parse(confGuardada);
+                // Asegurar que el nombre persista si ya estaba configurado, o forzar si era el genérico
+                if (tempConf.admin === "Administrador" || tempConf.admin === "Admin") {
+                    config.admin = "ACOMAACAP";
+                    localStorage.setItem('caja_config', JSON.stringify(config));
+                } else {
+                    config = tempConf;
+                }
+            } else {
+                localStorage.setItem('caja_config', JSON.stringify(config));
+            }
+
+        } catch (e) {
+            console.error("Error cargando datos", e);
+        }
+
+        // --- AL CARGAR ---
+        document.addEventListener('DOMContentLoaded', () => {
+            actualizarDashboard();
+            actualizarUIAdmin();
+            inicializarFiltros();
+
+            // Inicializar tabla de gastos vacía
+            if(document.getElementById('items-container') && document.getElementById('items-container').children.length === 0) {
+                agregarFilaItem();
+            }
+        });
+
+        function inicializarFiltros() {
+            const hoy = new Date();
+            const selAnio = document.getElementById('filtro-anio');
+            const selDia = document.getElementById('filtro-dia');
+
+            // Llenar Años
+            const anioActual = hoy.getFullYear();
+            selAnio.innerHTML = '<option value="todos">Todos</option>';
+            for(let y = 2024; y <= anioActual + 1; y++) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.innerText = y;
+                if(y === anioActual) opt.selected = true;
+                selAnio.appendChild(opt);
+            }
+
+            // Llenar Días
+            for(let d = 1; d <= 31; d++) {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.innerText = d;
+                selDia.appendChild(opt);
+            }
+
+            // Seleccionar mes actual
+            if(document.getElementById('filtro-mes')) {
+                document.getElementById('filtro-mes').value = hoy.getMonth();
+            }
+        }
+
+        function actualizarUIAdmin() {
+            if(document.getElementById('conf-admin')) document.getElementById('conf-admin').value = config.admin;
+            if(document.getElementById('lbl-admin-name')) document.getElementById('lbl-admin-name').innerText = config.admin;
+            if(document.getElementById('dash-admin-label')) document.getElementById('dash-admin-label').innerText = "Admin: " + config.admin;
+        }
+
+        // --- NAVEGACIÓN ---
+        function mostrarSeccion(id) {
+            document.querySelectorAll('.section').forEach(s => {
+                s.classList.remove('active');
+                s.style.display = 'none';
+            });
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            const seccion = document.getElementById(id);
+            if(seccion) {
+                seccion.style.display = 'block';
+                setTimeout(() => seccion.classList.add('active'), 10);
+            }
+
+            const map = {'dashboard':0, 'ingreso':1, 'gasto':2, 'historial':3, 'ajustes':4};
+            const navs = document.querySelectorAll('.nav-item');
+            if(navs[map[id]]) navs[map[id]].classList.add('active');
+
+            if(id === 'dashboard') actualizarDashboard();
+            if(id === 'historial') renderHistorial();
+            if(id === 'gasto') actualizarUIAdmin();
+        }
+
+        // --- TABLA DE GASTOS ---
+        function agregarFilaItem() {
+            const tbody = document.getElementById('items-container');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" placeholder="Detalle..." class="item-desc"></td>
+                <td><input type="number" placeholder="1" value="1" class="item-cant" oninput="calcularTotalGasto()" onfocus="this.select()"></td>
+                <td><input type="number" placeholder="0.00" step="0.01" class="item-precio" oninput="calcularTotalGasto()" onfocus="this.select()"></td>
+                <td style="text-align:center;"><button class="btn-remove-item" onclick="eliminarFila(this)">×</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function eliminarFila(btn) {
+            btn.closest('tr').remove();
+            calcularTotalGasto();
+            if(document.getElementById('items-container').children.length === 0) agregarFilaItem();
+        }
+
+        function calcularTotalGasto() {
+            let total = 0;
+            document.querySelectorAll('#items-container tr').forEach(row => {
+                const cant = parseFloat(row.querySelector('.item-cant').value) || 0;
+                const prec = parseFloat(row.querySelector('.item-precio').value) || 0;
+                total += (cant * prec);
+            });
+            document.getElementById('out-total-display').innerText = '$' + total.toFixed(2);
+            return total;
+        }
+
+        // --- GUARDAR ---
+        function guardarMovimiento(tipo) {
+            const fecha = new Date();
+            const nuevoMov = {
+                id: Date.now(),
+                tipo: tipo,
+                fecha: fecha.toLocaleDateString('es-ES'),
+                hora: fecha.toLocaleTimeString('es-ES'),
+                timestamp: fecha.getTime(),
+                admin: config.admin
+            };
+
+            if (tipo === 'entrada') {
+                const fuente = document.getElementById('in-fuente').value;
+                const monto = parseFloat(document.getElementById('in-monto').value);
+                const notas = document.getElementById('in-notas').value;
+
+                if (!fuente || !monto || monto <= 0) return alert("❌ Faltan datos.");
+
+                nuevoMov.concepto = fuente;
+                nuevoMov.recibe = config.admin;
+                nuevoMov.total = monto;
+                nuevoMov.items = [{ desc: "Ingreso: " + notas, cant: 1, precio: monto }];
+
+                document.getElementById('in-fuente').value = '';
+                document.getElementById('in-monto').value = '';
+                document.getElementById('in-notas').value = '';
+                alert("✅ Ingreso registrado.");
+
+            } else {
+                const recibe = document.getElementById('out-recibe').value;
+                const total = calcularTotalGasto();
+
+                if (!recibe) return alert("❌ Falta Beneficiario.");
+                if (total <= 0) return alert("❌ El monto debe ser mayor a 0.");
+
+                let items = [];
+                document.querySelectorAll('#items-container tr').forEach(row => {
+                    const desc = row.querySelector('.item-desc').value.trim();
+                    const cant = parseFloat(row.querySelector('.item-cant').value) || 0;
+                    const prec = parseFloat(row.querySelector('.item-precio').value) || 0;
+                    if(desc && cant > 0) {
+                        items.push({ desc, cant, precio: prec });
+                    }
+                });
+
+                if(items.length === 0) return alert("❌ Agregue items válidos.");
+
+                nuevoMov.concepto = "Vale de Caja";
+                nuevoMov.recibe = recibe;
+                nuevoMov.total = total;
+                nuevoMov.items = items;
+
+                if(confirm("✅ Vale generado. ¿Imprimir Ticket?")) {
+                    imprimirBluetooth(nuevoMov);
+                }
+
+                document.getElementById('out-recibe').value = '';
+                document.getElementById('items-container').innerHTML = '';
+                agregarFilaItem();
+                calcularTotalGasto();
+            }
+
+            movimientos.push(nuevoMov);
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+            if (typeof syncMovimiento === 'function') syncMovimiento(nuevoMov);
+            actualizarDashboard();
+            mostrarSeccion('dashboard');
+        }
+
+        // --- DASHBOARD ---
+        function actualizarDashboard() {
+            let saldo = 0;
+            let inMes = 0;
+            let outMes = 0;
+            const hoy = new Date();
+
+            movimientos.forEach(m => {
+                const mDate = new Date(m.timestamp);
+                const esEsteMes = (mDate.getMonth() === hoy.getMonth() && mDate.getFullYear() === hoy.getFullYear());
+
+                if (m.tipo === 'entrada') {
+                    saldo += m.total;
+                    if(esEsteMes) inMes += m.total;
+                } else {
+                    saldo -= m.total;
+                    if(esEsteMes) outMes += m.total;
+                }
+            });
+
+            document.getElementById('dash-saldo').innerText = '$' + saldo.toFixed(2);
+            document.getElementById('dash-total-in').innerText = '$' + inMes.toFixed(2);
+            document.getElementById('dash-total-out').innerText = '$' + outMes.toFixed(2);
+
+            document.getElementById('dash-saldo').style.color = saldo >= 0 ? 'var(--primary-dark)' : 'var(--danger)';
+        }
+
+        // --- HISTORIAL CON CARGA POR BLOQUES (lazy loading) ---
+        const HISTORIAL_LOTE = 20; // cuántos movimientos se pintan por bloque
+        let historialFiltrados = [];
+        let historialRenderizados = 0;
+        let historialObserver = null;
+        let historialCargandoLote = false;
+
+        function construirTarjetaMovimiento(m) {
+            const isEntrada = m.tipo === 'entrada';
+            const conceptoDisplay = isEntrada ? m.concepto : m.recibe;
+
+            let htmlItems = '';
+            if (!isEntrada && m.items && m.items.length > 0) {
+                htmlItems = `<div style="font-size:0.8rem; color:#546e7a; margin-top:8px; background:#f5f7fa; padding:8px; border-radius:6px;">
+                    ${m.items.map(i => `• ${i.desc} (x${i.cant})`).join('<br>')}
+                </div>`;
+            }
+
+            return `
+                <div class="list-item">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <span class="badge ${isEntrada ? 'badge-in' : 'badge-out'}">${isEntrada ? 'INGRESO' : 'SALIDA'}</span>
+                            <strong style="margin-left:5px; font-size:1.05rem;">${conceptoDisplay}</strong>
+                            <div style="font-size:0.75rem; color:#b0bec5; margin-top:4px;">${m.fecha} • ${m.hora}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span style="font-size:1.2rem; font-weight:800; color:${isEntrada ? 'var(--secondary)' : 'var(--danger)'}">
+                                ${isEntrada ? '+' : '-'}$${m.total.toFixed(2)}
+                            </span>
+                        </div>
+                    </div>
+                    ${htmlItems}
+                    <div style="text-align:right; margin-top:12px; padding-top:10px; border-top:1px dashed #eceff1; display:flex; gap:10px; justify-content:flex-end;">
+                         <button class="btn-bt" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirBluetoothById(${m.id})">📱 Ticket</button>
+                         <button class="btn-primary" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirPDF(${m.id})">📄 PDF</button>
+                         <button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="borrarMovimiento(${m.id})">🗑️</button>
+                    </div>
+                </div>`;
+        }
+
+        // Punto de entrada: aplica filtros y (re)inicia la paginación desde cero
+        function renderHistorial() {
+            const fAnio = document.getElementById('filtro-anio').value;
+            const fMes = document.getElementById('filtro-mes').value;
+            const fDia = document.getElementById('filtro-dia').value;
+            const fTipo = document.getElementById('filtro-tipo').value;
+
+            const div = document.getElementById('lista-movimientos');
+            div.innerHTML = '';
+            historialRenderizados = 0;
+
+            const lista = [...movimientos].reverse();
+
+            // Filtramos una sola vez y calculamos los totales sobre TODO lo filtrado,
+            // no solo sobre lo que ya está pintado en pantalla.
+            let sumIn = 0, sumOut = 0;
+            historialFiltrados = lista.filter(m => {
+                const mDate = new Date(m.timestamp);
+                if (fAnio !== 'todos' && mDate.getFullYear() != fAnio) return false;
+                if (fMes !== 'todos' && mDate.getMonth() != fMes) return false;
+                if (fDia !== 'todos' && mDate.getDate() != fDia) return false;
+                if (fTipo !== 'todos' && m.tipo !== fTipo) return false;
+
+                if (m.tipo === 'entrada') sumIn += m.total; else sumOut += m.total;
+                return true;
+            });
+
+            document.getElementById('hist-total-in').innerText = '$' + sumIn.toFixed(2);
+            document.getElementById('hist-total-out').innerText = '$' + sumOut.toFixed(2);
+
+            if (historialFiltrados.length === 0) {
+                div.innerHTML = lista.length === 0
+                    ? '<p style="text-align:center; color:#999; margin-top:20px;">No hay registros aún.</p>'
+                    : '<p style="text-align:center; color:#999; margin-top:20px;">No se encontraron registros con esos filtros.</p>';
+                actualizarSentinelHistorial();
+                return;
+            }
+
+            cargarSiguienteLoteHistorial();
+            iniciarObservadorHistorial();
+        }
+
+        // Pinta el siguiente bloque de movimientos (no repinta lo que ya estaba en pantalla)
+        function cargarSiguienteLoteHistorial() {
+            if (historialCargandoLote) return;
+            if (historialRenderizados >= historialFiltrados.length) return;
+            historialCargandoLote = true;
+
+            const div = document.getElementById('lista-movimientos');
+            const lote = historialFiltrados.slice(historialRenderizados, historialRenderizados + HISTORIAL_LOTE);
+
+            // Se arma el HTML del lote en un solo string y se inserta una sola vez
+            // (evita el patrón innerHTML += dentro de un forEach, que es muy lento
+            // con muchos registros porque re-procesa todo lo ya pintado en cada vuelta).
+            div.insertAdjacentHTML('beforeend', lote.map(construirTarjetaMovimiento).join(''));
+
+            historialRenderizados += lote.length;
+            historialCargandoLote = false;
+            actualizarSentinelHistorial();
+        }
+
+        function actualizarSentinelHistorial() {
+            const sentinel = document.getElementById('historial-sentinel');
+            if (!sentinel) return;
+            if (historialFiltrados.length === 0) {
+                sentinel.innerText = '';
+            } else if (historialRenderizados < historialFiltrados.length) {
+                sentinel.innerText = 'Cargando más registros...';
+            } else {
+                sentinel.innerText = `Mostrando los ${historialFiltrados.length} registros.`;
+            }
+        }
+
+        // Observa el elemento al final de la lista; cuando entra en pantalla (el usuario
+        // hizo scroll hasta el final), se carga el siguiente bloque automáticamente.
+        function iniciarObservadorHistorial() {
+            const sentinel = document.getElementById('historial-sentinel');
+            if (!sentinel) return;
+
+            if (!historialObserver) {
+                historialObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) cargarSiguienteLoteHistorial();
+                    });
+                }, { root: null, rootMargin: '200px', threshold: 0 });
+            }
+            historialObserver.disconnect();
+            historialObserver.observe(sentinel);
+        }
+        // --- UTILS ---
+        function guardarConfig() {
+            const val = document.getElementById('conf-admin').value;
+            if(val) {
+                config.admin = val;
+                localStorage.setItem('caja_config', JSON.stringify(config));
+                actualizarUIAdmin();
+                alert("✅ Nombre actualizado.");
+            }
+        }
+
+        function borrarMovimiento(id) {
+            if(confirm("¿Eliminar este registro permanentemente?")) {
+                movimientos = movimientos.filter(m => m.id !== id);
+                localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+                if (typeof eliminarMovimientoNube === 'function') eliminarMovimientoNube(id);
+                renderHistorial();
+                actualizarDashboard();
+            }
+        }
+
+        // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+function borrarTodo() {
+    // 🔑 CLAVE MAESTRA para BORRADO TOTAL
+    const MASTER_KEY = 'BORRAR';
+
+    // 1. Confirmación inicial
+    if (!confirm("⚠️ ZONA DE PELIGRO: ¿Estás ABSOLUTAMENTE seguro de borrar TODOS los datos? Esta acción es irreversible.")) {
+        return;
+    }
+
+    // 2. Solicitar contraseña
+    const password = prompt("Ingrese la contraseña de seguridad para confirmar el borrado total (CLAVE: BORRAR):");
+
+    // 3. Verificar contraseña
+    if (password === MASTER_KEY) {
+        // Si la clave es correcta
+        localStorage.clear();
+        alert("✅ Todos los datos han sido borrados. La aplicación se recargará.");
+        location.reload();
+    } else if (password !== null) {
+        // Si la clave es incorrecta (y el usuario no presionó Cancelar)
+        alert("❌ Contraseña incorrecta. La operación ha sido cancelada.");
+    }
+    // Si el usuario presiona Cancelar en el prompt, no sucede nada.
+}
+
+        function descargarBackup() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ movimientos, config }));
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataStr);
+            dl.setAttribute("download", "ACOMAACAP_Caja_" + new Date().toLocaleDateString().replace(/\//g,'-') + ".json");
+            document.body.appendChild(dl); dl.click(); dl.remove();
+        }
+
+        function procesarRestauracion(input) {
+            const file = input.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const d = JSON.parse(e.target.result);
+                    if(d.movimientos) {
+                        movimientos = d.movimientos;
+                        config = d.config || config;
+                        localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+                        localStorage.setItem('caja_config', JSON.stringify(config));
+                        if (typeof subirBackupMovimientosANube === 'function') {
+                            alert('Subiendo ' + movimientos.length + ' movimientos a la nube. No cierres la app...');
+                            await subirBackupMovimientosANube(movimientos);
+                        }
+                        alert("✅ Datos restaurados y sincronizados con la nube.");
+                        location.reload();
+                    }
+                } catch(err){ console.error(err); alert("❌ Error: Archivo inválido."); }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- IMPRESIÓN ---
+        function imprimirBluetoothById(id) {
+            const m = movimientos.find(x => x.id === id);
+            if(m) imprimirBluetooth(m);
+        }
+
+        function utf8_to_b64(str) {
+            return window.btoa(unescape(encodeURIComponent(str)));
+        }
+
+        // --- FUNCIÓN TICKET BLUETOOTH ACTUALIZADA (Con Firmas) ---
+        function imprimirBluetooth(m) {
+            let t = "";
+            // Centrar título manualmente con espacios (ajustado para 58mm/80mm)
+            t += "           ACOMAACAP\n";
+            t += "          TESORERIA\n";
+            t += "--------------------------------\n";
+            t += `Ticket: ${m.id.toString().slice(-6)}\n`;
+            t += `Fecha: ${m.fecha} ${m.hora}\n`;
+            t += "--------------------------------\n";
+
+            // --- DATOS DEL MOVIMIENTO ---
+            if (m.tipo === 'entrada') {
+                t += "TIPO: INGRESO\n";
+                t += `Ref: ${m.concepto.substring(0,20)}\n`;
+                t += `Atiende: ${m.admin.substring(0,20)}\n`;
+            } else {
+                t += "TIPO: VALE SALIDA\n";
+                t += `Entrega: ${m.admin.substring(0,20)}\n`;
+                t += `Recibe: ${m.recibe.substring(0,20)}\n`;
+            }
+
+            t += "--------------------------------\n";
+            t += "DESCRIPCION      CANT   TOTAL\n";
+
+            m.items.forEach(item => {
+                // Cortamos descripción a 16 chars para que quepa en una línea
+                let desc = item.desc.substring(0, 16).padEnd(16, ' ');
+                let cant = item.cant.toString().padEnd(3, ' ');
+                let sub = (item.cant * item.precio).toFixed(2);
+                t += `${desc} ${cant} $${sub}\n`;
+            });
+
+            t += "--------------------------------\n";
+            // Alineación del total a la derecha
+            t += `TOTAL:            $${m.total.toFixed(2).padStart(8)}\n`;
+            t += "\n\n";
+
+            // --- ZONA DE FIRMAS (Texto plano) ---
+            // Usamos saltos de línea y guiones bajos para simular las firmas
+
+            t += "________________  ________________\n";
+            t += " Quien Entrega      Quien Recibe  \n";
+            t += "    (Firma)            (Firma)    \n";
+
+            t += "\n\n\n"; // Espacio extra para cortar papel
+
+            // Convertir y enviar
+            const base64Str = utf8_to_b64(t);
+            window.location.href = "rawbt:base64," + base64Str;
+        }
+      // ⚠️ FUNCIÓN MODIFICADA PARA USAR LA INTERFAZ 'Android' DEL SISTEMA DE AGUA ⚠️
+        function triggerDownload(base64Clean, name) {
+            // La interfaz en Java se llama 'Android', no 'AndroidApp'
+            if (typeof Android !== 'undefined') {
+                // La función en Java se llama 'guardarArchivo' y requiere 3 argumentos:
+                // 1. base64Data
+                // 2. fileName
+                // 3. mimeType
+                Android.guardarArchivo(base64Clean, name, "application/pdf");
+            } else {
+                // Fallback para navegadores (código original)
+                const link = document.createElement('a');
+                link.href = base64Clean;
+                link.download = name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                alert(`Archivo ${name} generado en el navegador.`);
+            }
+        }
+        // FIN DE LA MODIFICACIÓN
+
+        // --- FUNCIÓN DE BACKUP ACTUALIZADA ---
+        function descargarBackup() {
+            // Generamos el JSON
+            const jsonStr = JSON.stringify({ movimientos, config });
+            // Lo convertimos a Base64 para enviarlo a Android
+            const base64Str = utf8_to_b64(jsonStr);
+            const dataUri = "data:application/json;base64," + base64Str;
+
+            const nombreArchivo = "Backup_ACOMAACAP_" + new Date().toLocaleDateString().replace(/\//g,'-') + ".json";
+
+            triggerDownload(dataUri, nombreArchivo);
+        }
+
+        // --- FUNCIÓN DE REPORTE PDF ACTUALIZADA ---
+        function generarReportePDF(tipoReporte) {
+            if (typeof html2pdf === 'undefined') return alert("⚠️ Error librería PDF. Conéctese a internet.");
+
+            // ... (Tu lógica de filtrado se mantiene igual) ...
+            const fAnio = document.getElementById('filtro-anio').value; const fMes = document.getElementById('filtro-mes').value; const fDia = document.getElementById('filtro-dia').value;
+            let movs = [...movimientos].sort((a, b) => a.timestamp - b.timestamp);
+            const hoy = new Date(); const aS = fAnio!=='todos'?parseInt(fAnio):hoy.getFullYear(); const mS = fMes!=='todos'?parseInt(fMes):hoy.getMonth(); const dS = fDia!=='todos'?parseInt(fDia):hoy.getDate();
+            movs = movs.filter(m=>{ const d=new Date(m.timestamp); if(tipoReporte==='anual')return d.getFullYear()==aS; if(tipoReporte==='mensual')return d.getFullYear()==aS&&d.getMonth()==mS; if(tipoReporte==='diario')return d.getFullYear()==aS&&d.getMonth()==mS&&d.getDate()==dS; return false; });
+            if(movs.length===0) return alert("❌ No hay datos para el reporte.");
+
+            // Generar tabla HTML...
+            let htmlRows = ''; let tIn=0, tOut=0;
+            movs.forEach(m => {
+                const esIn = m.tipo === 'entrada'; if(esIn)tIn+=m.total; else tOut+=m.total;
+                htmlRows += `<tr><td style="border:1px solid #eee;padding:6px;">${m.fecha} ${m.hora}</td><td style="border:1px solid #eee;padding:6px;">${esIn?'INGRESO':'VALE'} - ${esIn?m.concepto:(m.items[0]?m.items[0].desc:'Gasto')}</td><td style="border:1px solid #eee;padding:6px;">${m.recibe}</td><td style="border:1px solid #eee;padding:6px;text-align:right;">${esIn?'$'+m.total.toFixed(2):'-'}</td><td style="border:1px solid #eee;padding:6px;text-align:right;">${esIn?'-':'$'+m.total.toFixed(2)}</td></tr>`;
+            });
+
+            // Llenar datos visuales
+            document.getElementById('r-titulo').innerText = `Reporte ${tipoReporte.toUpperCase()}`;
+            document.getElementById('r-total-in').innerText = '$'+tIn.toFixed(2);
+            document.getElementById('r-total-out').innerText = '$'+tOut.toFixed(2);
+            document.getElementById('r-saldo-neto').innerText = '$'+(tIn-tOut).toFixed(2);
+            document.querySelector('#r-tabla-movimientos tbody').innerHTML = htmlRows;
+
+            // Mostrar contenedor
+            const el = document.getElementById('reporte-container');
+            el.style.position = 'static'; el.style.left = '0'; el.style.display = 'block';
+
+            if (typeof Android !== 'undefined') {
+                // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
+                const opt = { margin: 10, filename: `Reporte_${tipoReporte}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } };
+                html2pdf().set(opt).from(el).output('datauristring').then(function (pdfBase64) {
+                    el.style.position = 'absolute'; el.style.left = '-9999px';
+                    triggerDownload(pdfBase64, `Reporte_${tipoReporte}_${aS}.pdf`);
+                });
+            } else {
+                // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
+                document.title = `Reporte_${tipoReporte}`;
+                imprimirConSistema('reporte-container').then(() => {
+                    el.style.position = 'absolute'; el.style.left = '-9999px';
+                    document.title = 'Caja ACOMAACAP';
+                });
+            }
+        }
+
+        // --- FUNCIÓN TICKET PDF CON ESPACIOS DE FIRMA ---
+        function imprimirPDF(id) {
+             const m = movimientos.find(x => x.id === id);
+             if(!m) return;
+             if (typeof html2pdf === 'undefined') return alert("⚠️ Error librería PDF. Revise internet.");
+
+             // 1. Construir el contenido HTML del ticket
+             let itemsHtml = '';
+             m.items.forEach(item => {
+                 itemsHtml += `
+                 <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
+                    <span>${item.desc.substring(0,20)} x${item.cant}</span>
+                    <span>$${(item.cant * item.precio).toFixed(2)}</span>
+                 </div>`;
+             });
+
+             const contenidoTicket = `
+             <div id="ticket-temp-pdf" style="
+                width: 72mm;
+                background: white;
+                color: black;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                line-height: 1.2;
+                padding: 2mm;
+                border: 1px solid white;">
+
+                <div style="text-align:center; margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom:5px;">
+                    <h2 style="margin:0; font-size:14px;">ACOMAACAP</h2>
+                    <p style="margin:0; font-size:10px;">TESORERIA</p>
+                    <p style="margin:5px 0;">Ticket #${m.id}</p>
+                    <p style="margin:0;">${m.fecha} ${m.hora}</p>
+                </div>
+
+                <div style="margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom:5px;">
+                    <p style="margin:2px 0;"><strong>${m.tipo === 'entrada' ? 'INGRESO' : 'SALIDA'}</strong></p>
+                    <p style="margin:2px 0;">De/Para: ${m.tipo === 'entrada' ? m.concepto : m.recibe}</p>
+                    <p style="margin:2px 0; font-size:9px;">Atendido por: ${m.admin}</p>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    ${itemsHtml}
+                </div>
+
+                <div style="border-top: 1px dashed black; padding-top: 5px; text-align: right;">
+                    <strong style="font-size: 16px;">TOTAL: $${m.total.toFixed(2)}</strong>
+                </div>
+
+                <div style="margin-top: 20px; text-align: center; padding-top: 15px;">
+                    <div style="display:flex; justify-content:space-between; font-size: 10px;">
+                        <div style="width: 45%;">
+                            <div style="height: 1px; background: black; margin-bottom: 5px;"></div>
+                            <span>Firma de quien entrega</span>
+                        </div>
+                        <div style="width: 45%;">
+                            <div style="height: 1px; background: black; margin-bottom: 5px;"></div>
+                            <span>Firma de quien recibe</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 15px; font-size: 9px;">
+                    <p>--- Copia Digital ---</p>
+                </div>
+             </div>`;
+
+             // 2. Crear un contenedor temporal VISIBLE pero oculto visualmente (z-index bajo)
+             const container = document.createElement('div');
+             container.innerHTML = contenidoTicket;
+             container.style.position = 'fixed';
+             container.style.top = '0';
+             container.style.left = '0';
+             container.style.zIndex = '-9999';
+             container.style.background = 'white';
+             document.body.appendChild(container);
+
+             const element = document.getElementById('ticket-temp-pdf');
+
+             if (typeof Android !== 'undefined') {
+                 // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
+                 // 3. Calcular la altura dinámica para que NO SE CORTE
+                 const heightPx = element.offsetHeight;
+                 // Se aumentó el margen de altura a 15mm para asegurar espacio para las firmas
+                 const heightMm = Math.floor(heightPx * 0.264583) + 15;
+
+                 const opt = {
+                    margin: 0,
+                    filename: `Ticket_${m.id}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                    jsPDF: { unit: 'mm', format: [80, heightMm < 60 ? 60 : heightMm], orientation: 'portrait' }
+                 };
+
+                 html2pdf().set(opt).from(element).output('datauristring').then(function (pdfBase64) {
+                    document.body.removeChild(container);
+                    triggerDownload(pdfBase64, `Ticket_${m.id}.pdf`);
+                }).catch(err => {
+                    console.error(err);
+                    alert("Error generando PDF");
+                    document.body.removeChild(container);
+                });
+             } else {
+                 // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
+                 document.title = `Ticket_${m.id}`;
+                 imprimirConSistema('ticket-temp-pdf').then(() => {
+                     document.body.removeChild(container);
+                     document.title = 'Caja ACOMAACAP';
+                 });
+             }
+        }
+
+        // --- NUEVA FUNCIÓN DE NAVEGACIÓN INTELIGENTE ---
+        function irAHistorial(tipo) {
+            // 1. Forzar filtros para ver el "Mes Actual" (coherente con el Dashboard)
+            const hoy = new Date();
+            const anioSelect = document.getElementById('filtro-anio');
+            const mesSelect = document.getElementById('filtro-mes');
+
+            // Intentar seleccionar el año actual si existe en la lista
+            if (anioSelect.querySelector(`option[value="${hoy.getFullYear()}"]`)) {
+                anioSelect.value = hoy.getFullYear();
+            }
+
+            // Seleccionar mes actual
+            mesSelect.value = hoy.getMonth();
+            document.getElementById('filtro-dia').value = 'todos'; // Todo el mes
+
+            // 2. Aplicar el filtro de Tipo (Entrada o Salida)
+            document.getElementById('filtro-tipo').value = tipo;
+
+            // 3. Ir a la sección
+            mostrarSeccion('historial');
+        }
+
+        // =======================================================
+        // 🔑 INICIALIZACIÓN (se completa tras validar sesión, ver módulo Firebase abajo)
+        // =======================================================
+        function iniciarAppCaja() {
+            cargarFiltrosFecha();
+            cargarSelectUsuarios();
+            actualizarDashboard();
+            mostrarSeccion('dashboard');
+        }
+    </script>
+
+    <!-- ============================================================
+         ☁️ MÓDULO FIREBASE: autenticación + sincronización en tiempo real
+         ============================================================ -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        import {
+            getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+        } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+        import {
+            initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+            collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, writeBatch
+        } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDeMlSIltDHNz2-l-cgDkDLpYa6ZX6kL4Q",
+            authDomain: "sistema-de-agua-acomaacap.firebaseapp.com",
+            projectId: "sistema-de-agua-acomaacap",
+            storageBucket: "sistema-de-agua-acomaacap.firebasestorage.app",
+            messagingSenderId: "170438583247",
+            appId: "1:170438583247:web:531ee82a7a12b3fec7e8ba",
+            measurementId: "G-K8T5SR9FTQ"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const auth = getAuth(fbApp);
+        const db = initializeFirestore(fbApp, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+
+        function setSyncText(txt) {
+            const el = document.getElementById('sync-status');
+            if (el) el.innerText = txt;
+        }
+
+        // ---------- LOGIN (misma cuenta que en index.html) ----------
+        window.iniciarSesion = function () {
+            const email = document.getElementById('login-email').value.trim();
+            const pass = document.getElementById('login-pass').value;
+            const errBox = document.getElementById('login-error');
+            const btn = document.getElementById('btn-login');
+            errBox.style.display = 'none';
+            if (!email || !pass) { errBox.innerText = 'Ingresa correo y contraseña.'; errBox.style.display = 'block'; return; }
+            btn.disabled = true; btn.innerText = 'Entrando...';
+            signInWithEmailAndPassword(auth, email, pass)
+                .catch(() => { errBox.innerText = '❌ Correo o contraseña incorrectos.'; errBox.style.display = 'block'; })
+                .finally(() => { btn.disabled = false; btn.innerText = '🔓 Entrar al Sistema'; });
+        };
+
+        window.cerrarSesion = function () {
+            if (!confirm('¿Cerrar sesión?')) return;
+            signOut(auth);
+        };
+
+        // ---------- SINCRONIZACIÓN EN TIEMPO REAL ----------
+        function upsertLocal(arr, obj) {
+            const ix = arr.findIndex(x => x.id === obj.id);
+            if (ix > -1) arr[ix] = obj; else arr.push(obj);
+        }
+        function removeLocal(arr, id) {
+            const ix = arr.findIndex(x => x.id === id);
+            if (ix > -1) arr.splice(ix, 1);
+        }
+
+        let listenersIniciados = false;
+        function iniciarListenersNube() {
+            if (listenersIniciados) return;
+            listenersIniciados = true;
+
+            onSnapshot(collection(db, 'movimientos'), (snap) => {
+                snap.docChanges().forEach(ch => {
+                    const id = Number(ch.doc.id);
+                    if (ch.type === 'removed') removeLocal(movimientos, id);
+                    else upsertLocal(movimientos, { ...ch.doc.data(), id });
+                });
+                localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+                if (typeof actualizarDashboard === 'function') actualizarDashboard();
+                const hist = document.getElementById('historial');
+                if (hist && hist.classList.contains('active') && typeof renderHistorial === 'function') renderHistorial();
+                setSyncText('🟢 Sincronizado');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+        }
+
+        // ---------- ESCRITURA (app -> nube) ----------
+        window.syncMovimiento = (m) => setDoc(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
+        window.eliminarMovimientoNube = (id) => deleteDoc(doc(db, 'movimientos', String(id))).catch(console.error);
+
+        // Sube un backup JSON antiguo de caja completo a Firestore, en lotes de 450 documentos.
+        window.subirBackupMovimientosANube = async function (movimientosArr) {
+            const CHUNK = 450;
+            for (let i = 0; i < movimientosArr.length; i += CHUNK) {
+                const batch = writeBatch(db);
+                movimientosArr.slice(i, i + CHUNK).forEach(m => {
+                    batch.set(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true });
+                });
+                await batch.commit();
+            }
+        };
+
+        // ---------- ESTADO DE SESIÓN ----------
+        onAuthStateChanged(auth, (user) => {
+            const login = document.getElementById('login-screen');
+            const app = document.getElementById('app-content');
+            if (user) {
+                login.style.display = 'none';
+                app.style.display = 'block';
+                iniciarListenersNube();
+                if (typeof iniciarAppCaja === 'function') iniciarAppCaja();
+            } else {
+                login.style.display = 'flex';
+                app.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('offline', () => setSyncText('📴 Sin conexión (guardando local)'));
+        window.addEventListener('online', () => setSyncText('🔄 Reconectando...'));
+
+        // ===== REGISTRO DEL SERVICE WORKER (PWA) =====
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registrado:', reg.scope))
+                    .catch(err => console.error('Error registrando Service Worker:', err));
+            });
+        }
+
+        // ===== IMPRESIÓN NATIVA CON EL SISTEMA DE WINDOWS =====
+        // Muestra el diálogo de impresión del sistema operativo (permite elegir
+        // impresora física o "Microsoft Print to PDF") en lugar de solo descargar el PDF.
+        function imprimirConSistema(elementId) {
+            return new Promise((resolve) => {
+                const finalizar = () => {
+                    window.onafterprint = null;
+                    resolve();
+                };
+                window.onafterprint = finalizar;
+                setTimeout(() => {
+                    window.print();
+                    setTimeout(finalizar, 800);
+                }, 150);
+            });
+        }
+    </script>
+</body>
+</html>

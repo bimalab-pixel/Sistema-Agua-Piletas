@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sin conexión - ACOMAACAP</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f2f4f7; color: #102027;
+            margin: 0; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px; text-align: center;
+        }
+        .card {
+            background: white; border-radius: 16px; padding: 30px 25px;
+            max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+        .icon { font-size: 3rem; margin-bottom: 10px; }
+        h2 { color: #0288d1; margin: 0 0 8px; }
+        p { color: #546e7a; font-size: 0.9rem; line-height: 1.4; }
+        button {
+            margin-top: 18px; background: #0288d1; color: white; border: none;
+            padding: 12px 20px; border-radius: 10px; font-size: 1rem; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">📴</div>
+        <h2>Sin conexión</h2>
+        <p>No hay conexión a internet y esta página aún no se ha guardado para uso sin conexión. Los datos que ya usaste antes siguen disponibles localmente.</p>
+        <button onclick="location.href='index.html'">Reintentar</button>
+    </div>
+</body>
+</html>

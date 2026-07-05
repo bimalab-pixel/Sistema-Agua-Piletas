@@ -1,0 +1,3255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ACOMAACAP v9</title>
+
+    <!-- ===== PWA: Manifest e íconos ===== -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0288d1">
+    <meta name="description" content="Sistema de facturación de agua potable - ACOMAACAP Las Piletas">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ACOMAACAP">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+
+    <script src="html2pdf.bundle.min.js"></script>
+    <style>
+        /* ===== IMPRESIÓN NATIVA (SISTEMA WINDOWS) ===== */
+        @media print {
+            body * { visibility: hidden !important; }
+            #ticket-container, #ticket-container * { visibility: visible !important; }
+            #ticket-container {
+                position: absolute !important;
+                left: 0 !important; top: 0 !important;
+                width: 80mm !important;
+            }
+        }
+        :root {
+            --primary: #0288d1;
+            --primary-dark: #01579b;
+            --secondary: #2e7d32;
+            --danger: #c62828;
+            --bluetooth: #5e35b1;
+            --warning: #ff8f00;
+            --dark: #37474f;
+            --bg-color: #f2f4f7;
+            --card-bg: #ffffff;
+            --text-main: #102027;
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; padding: 0;
+            background-color: var(--bg-color); color: var(--text-main);
+            padding-bottom: calc(20px + var(--safe-bottom));
+        }
+
+        header {
+            background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+            color: white; padding: 20px 15px; text-align: center;
+            border-bottom-left-radius: 20px; border-bottom-right-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100;
+        }
+        header h1 { margin: 0; font-size: 1.3rem; font-weight: 800; }
+        header p { margin: 5px 0 0; opacity: 0.9; font-size: 0.85rem; }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 20px 15px; }
+        .section { display: none; animation: slideUp 0.3s ease; }
+        .section.active { display: block; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        .card {
+            background: var(--card-bg); padding: 20px; border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 15px; position: relative;
+        }
+        .card:active { transform: scale(0.98); }
+        .card-blue { border-left: 5px solid var(--primary); }
+        .card-green { border-left: 5px solid var(--secondary); }
+        .card-red { border-left: 5px solid var(--danger); }
+
+        /* GRID CASERÍOS */
+        .grid-caserios {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+        }
+        .btn-caserio {
+            background: white; padding: 20px 10px; border-radius: 15px;
+            text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            border: 2px solid transparent; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-caserio:active { transform: scale(0.95); background: #f0f0f0; }
+        .btn-caserio h4 { margin: 10px 0 0 0; color: #333; font-size: 0.95rem; }
+        .btn-caserio .icon { font-size: 2.5rem; }
+
+        /* Colores Caseríos */
+        .c-planes { border-bottom: 4px solid #e91e63; }
+        .c-piletas { border-bottom: 4px solid #2196f3; }
+        .c-rosa { border-bottom: 4px solid #ff9800; }
+        .c-venecia { border-bottom: 4px solid #4caf50; }
+
+        .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .card-icon { font-size: 2.2rem; display: block; margin-bottom: 8px; }
+        .card-val { font-size: 1.5rem; font-weight: 800; display: block; margin: 5px 0; color: #333; }
+        .card-label { font-size: 0.85rem; color: #666; font-weight: 600; }
+        .card-centrado { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; min-height: 90px; }
+
+        /* MENÚ PRINCIPAL - tarjetas grandes tipo dashboard */
+        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .menu-card {
+            background: white; border-radius: 18px; padding: 35px 15px;
+            text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+            cursor: pointer; border-bottom: 6px solid transparent; transition: all 0.15s;
+        }
+        .menu-card:active { transform: scale(0.96); }
+        .menu-icon { font-size: 2.8rem; display: block; margin-bottom: 12px; }
+        .menu-label { font-weight: 800; color: #333; font-size: 1rem; display: block; }
+        .menu-card-blue { border-bottom-color: var(--primary); }
+        .menu-card-green { border-bottom-color: var(--secondary); }
+        .menu-card-orange { border-bottom-color: var(--warning); }
+        .menu-card-purple { border-bottom-color: #7b1fa2; }
+
+        /* Botones flotantes de navegación (Atrás / Menú principal) */
+        .btn-nav-flotante {
+            position: fixed; bottom: 18px; width: 48px; height: 48px;
+            border-radius: 50%; display: none; border: none;
+            align-items: center; justify-content: center; cursor: pointer;
+            z-index: 200; color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+            transition: transform 0.1s;
+        }
+        .btn-nav-flotante:active { transform: scale(0.92); }
+        #btn-atras { left: 15px; background: #ff6f00; font-size: 1.7rem; line-height: 1; }
+        #btn-ir-menu { right: 15px; background: #2e7d32; font-size: 1.5rem; }
+
+        /* Botón llamativo de Recaudación */
+        .btn-recaudacion {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: white; border: none; font-weight: 800; font-size: 1rem;
+            padding: 14px 18px; border-radius: 14px; width: 100%;
+            display:flex; align-items:center; justify-content:center; gap:8px;
+            box-shadow: 0 6px 16px rgba(17,153,142,0.45);
+            animation: pulso-recaudacion 2.2s ease-in-out infinite;
+            cursor: pointer;
+        }
+        .btn-recaudacion:active { transform: scale(0.96); }
+        @keyframes pulso-recaudacion {
+            0%, 100% { box-shadow: 0 6px 16px rgba(17,153,142,0.45); transform: scale(1); }
+            50% { box-shadow: 0 9px 24px rgba(17,153,142,0.8); transform: scale(1.025); }
+        }
+
+        input, select {
+            width: 100%; padding: 14px 12px; margin: 8px 0 20px 0;
+            border: 1px solid #e0e0e0; border-radius: 12px; font-size: 16px;
+            background: #fff; appearance: none;
+        }
+        input:focus, select:focus { border-color: var(--primary); outline: none; }
+        label { font-weight: 700; color: #546e7a; font-size: 0.9rem; }
+
+        .btn {
+            width: 100%; padding: 16px; border: none; border-radius: 12px;
+            font-size: 1rem; font-weight: 700; cursor: pointer; color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-bottom: 12px; transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: linear-gradient(135deg, #0288d1, #01579b); }
+        .btn-success { background: linear-gradient(135deg, #43a047, #2e7d32); }
+        .btn-danger { background: linear-gradient(135deg, #e53935, #c62828); }
+        .btn-bt { background: linear-gradient(135deg, #7e57c2, #5e35b1); }
+        .btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); box-shadow: none; }
+
+        .list-item {
+            background: white; padding: 16px; margin-bottom: 12px;
+            border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.03);
+        }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+        .pendiente { background: #ffebee; color: #c62828; }
+        .pagado { background: #e8f5e9; color: #2e7d32; }
+
+        /* TABLA RESPONSIVA */
+        table { width: 100%; border-collapse: collapse; }
+        @media screen and (max-width: 600px) {
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { margin-bottom: 10px; border: 1px solid #eee; border-radius: 12px; background: white; padding: 10px; }
+            td { border: none; position: relative; padding-left: 50%; text-align: right; padding-bottom: 8px; border-bottom: 1px solid #f5f5f5; }
+            td:before { position: absolute; left: 10px; font-weight: bold; content: attr(data-label); color: #78909c; }
+        }
+
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-top: 1px solid #eee; display: flex; justify-content: space-around;
+            padding-top: 10px; padding-bottom: calc(10px + var(--safe-bottom)); z-index: 1000;
+        }
+        .nav-item { text-align: center; color: #90a4ae; font-size: 0.7rem; cursor: pointer; flex: 1; }
+        .nav-item.active { color: var(--primary); font-weight: 700; }
+        .nav-icon { font-size: 1.5rem; display: block; margin-bottom: 3px; }
+
+                #ticket-container {
+            position: absolute; left: -9999px; top: 0;
+            /* CAMBIO: Usamos milímetros para coincidir con el PDF */
+            width: 70mm;
+            padding: 5px;
+            background: white; color: black;
+            font-family: 'Courier New', monospace;
+            font-size: 11px; /* Letra un poco más pequeña para prevenir desbordes */
+            line-height: 1.2;
+        }
+
+        .ticket-header { text-align: center; border-bottom: 1px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
+        .ticket-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+        .ticket-total { border-top: 1px dashed black; padding-top: 10px; margin-top: 10px; font-weight: bold; font-size: 16px; text-align: right; }
+    </style>
+</head>
+<body>
+
+<!-- ===== PANTALLA DE LOGIN ===== -->
+<div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, var(--primary), var(--primary-dark)); padding:20px;">
+    <div style="background:white; border-radius:16px; padding:30px 25px; width:100%; max-width:360px; box-shadow:0 8px 30px rgba(0,0,0,0.25);">
+        <div style="text-align:center; margin-bottom:20px;">
+            <div style="font-size:2.8rem;">💧</div>
+            <h2 style="margin:5px 0 0; color:var(--primary-dark);">ACOMAACAP</h2>
+            <p style="margin:5px 0 0; color:#666; font-size:0.85rem;">Inicia sesión para continuar</p>
+        </div>
+        <label>Correo</label>
+        <input type="email" id="login-email" placeholder="usuario@acomaacap.local" autocomplete="username">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+        <div id="login-error" style="color:var(--danger); font-size:0.85rem; margin:-10px 0 15px; display:none;"></div>
+        <button class="btn btn-primary" id="btn-login" onclick="iniciarSesion()">🔑 Entrar</button>
+    </div>
+</div>
+
+<!-- ===== MODAL: RECAUDACIÓN (Hoy / Mes / Total) ===== -->
+<div id="modal-recaudacion" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; align-items:center; justify-content:center; padding:15px;">
+    <div style="background:white; border-radius:16px; max-width:420px; width:100%; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:90vh; overflow-y:auto;">
+        <h3 style="margin:0 0 4px; text-align:center;">📊 Recaudación de Cobros</h3>
+        <p style="text-align:center; color:#888; font-size:0.78rem; margin:0 0 14px;">Basado en los recibos marcados como pagados</p>
+
+        <!-- KPIs rápidos, siempre globales -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:16px;">
+            <div style="background:#e8f5e9; border-radius:10px; padding:8px 6px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#2e7d32;">HOY</div>
+                <div id="rec-hoy-monto" style="font-size:0.92rem; font-weight:800; color:#2e7d32;">$0.00</div>
+                <div id="rec-hoy-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+            </div>
+            <div style="background:#e3f2fd; border-radius:10px; padding:8px 6px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#1565c0;">MES</div>
+                <div id="rec-mes-monto" style="font-size:0.92rem; font-weight:800; color:#1565c0;">$0.00</div>
+                <div id="rec-mes-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+            </div>
+            <div style="background:#fff3e0; border-radius:10px; padding:8px 6px; text-align:center;">
+                <div style="font-size:0.68rem; font-weight:700; color:#ef6c00;">TOTAL</div>
+                <div id="rec-total-monto" style="font-size:0.92rem; font-weight:800; color:#ef6c00;">$0.00</div>
+                <div id="rec-total-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+            </div>
+        </div>
+
+        <hr style="border:none; border-top:1px solid #eee; margin:0 0 14px;">
+
+        <label style="font-size:0.8rem;">Ver por periodo</label>
+        <select id="rec-modo-periodo" onchange="cambiarModoPeriodoRecaudacion()" style="margin-bottom:8px;">
+            <option value="hoy">Hoy</option>
+            <option value="mes">Este mes</option>
+            <option value="anio">Este año</option>
+            <option value="dia">📅 Elegir un día exacto</option>
+            <option value="mesx">🗓️ Elegir un mes</option>
+            <option value="aniox">📆 Elegir un año</option>
+            <option value="todo">Todo el tiempo</option>
+        </select>
+        <input type="date" id="rec-input-dia" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
+        <input type="month" id="rec-input-mes" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
+        <input type="number" id="rec-input-anio" placeholder="Ej. 2026" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
+
+        <label style="font-size:0.8rem;">Caserío</label>
+        <select id="rec-filtro-caserio" onchange="actualizarRecaudacion()" style="margin-bottom:14px;">
+            <option value="todos">Todos los caseríos</option>
+            <option value="Los Planes">Los Planes</option>
+            <option value="Piletas">Piletas</option>
+            <option value="Santa Rosa">Santa Rosa</option>
+            <option value="Venecia">Venecia</option>
+        </select>
+
+        <div style="background:#f3f4f6; border-radius:12px; padding:12px 14px; margin-bottom:14px; text-align:center;">
+            <div id="rec-periodo-label" style="font-size:0.78rem; color:#555;">Recaudado hoy</div>
+            <div id="rec-periodo-monto" style="font-size:1.5rem; font-weight:800; color:#111;">$0.00</div>
+            <div id="rec-periodo-cantidad" style="font-size:0.75rem; color:#777;">0 recibos</div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <button type="button" id="tab-btn-pagados" class="btn-bt" onclick="mostrarTabRecaudacion('pagados')" style="margin:0; flex:1; background:#2e7d32;">✅ Pagados</button>
+            <button type="button" id="tab-btn-deben" class="btn-bt" onclick="mostrarTabRecaudacion('deben')" style="margin:0; flex:1; background:#c62828; opacity:0.55;">⏳ Deben</button>
+        </div>
+
+        <div id="rec-lista-contenedor" style="background:white; border:1px solid #eee; border-radius:10px; max-height:220px; overflow-y:auto;"></div>
+
+        <button type="button" class="btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:14px;">Cerrar</button>
+    </div>
+</div>
+</div>
+
+<!-- ===== CONTENIDO DE LA APP (oculto hasta iniciar sesión) ===== -->
+<div id="app-content" style="display:none;">
+
+
+<header>
+    <button id="btn-atras" class="btn-nav-flotante" onclick="irAtras()" title="Atrás">⬅️</button>
+    <button id="btn-ir-menu" class="btn-nav-flotante" onclick="irMenuPrincipal()" title="Menú principal">🏠</button>
+    <h1>💧 ACOMAACAP</h1>
+    <p>Sistema de facturación de Agua | Cantón Las Piletas</p>
+    <p id="sync-status" style="font-size:0.75rem; margin-top:4px; opacity:0.85;">🔄 Conectando...</p>
+</header>
+
+<div class="container">
+
+    <div id="menu-principal" class="section active">
+        <div style="text-align:center; margin: 5px 0 25px;">
+            <h2 style="margin:0; color:var(--dark);">💧 ACOMAACAP</h2>
+            <p style="color:#888; margin:6px 0 0; font-size:0.9rem;">Selecciona una opción</p>
+        </div>
+        <div class="menu-grid">
+            <div class="menu-card menu-card-blue" onclick="mostrarSeccion('menu-contabilidad')">
+                <span class="menu-icon">📊</span>
+                <span class="menu-label">Contabilidad</span>
+            </div>
+            <div class="menu-card menu-card-green" onclick="mostrarSeccion('facturar')">
+                <span class="menu-icon">🧾</span>
+                <span class="menu-label">Generar Recibo</span>
+            </div>
+            <div class="menu-card menu-card-orange" onclick="mostrarSeccion('cobrar')">
+                <span class="menu-icon">💰</span>
+                <span class="menu-label">Cobrar</span>
+            </div>
+            <div class="menu-card menu-card-purple" onclick="mostrarSeccion('buscador-global')">
+                <span class="menu-icon">🔍</span>
+                <span class="menu-label">Buscar</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="menu-contabilidad" class="section">
+        <h2 style="text-align:center; margin-bottom:20px;">📊 Contabilidad</h2>
+        <div class="dash-grid">
+            <div class="card card-blue card-centrado" onclick="mostrarSeccion('dashboard')">
+                <span class="card-icon">🏠</span>
+                <span class="card-label">Inicio</span>
+            </div>
+            <div class="card card-blue card-centrado" onclick="mostrarSeccion('usuarios')">
+                <span class="card-icon">👥</span>
+                <span class="card-label">Usuarios</span>
+            </div>
+            <div class="card card-red card-centrado" onclick="mostrarSeccion('historial')">
+                <span class="card-icon">📂</span>
+                <span class="card-label">Historial</span>
+            </div>
+            <div class="card card-green card-centrado" onclick="mostrarSeccion('contabilidad')">
+                <span class="card-icon">📊</span>
+                <span class="card-label">Ingresos</span>
+            </div>
+            <div class="card card-dark card-centrado" onclick="irACaja()" style="grid-column: 1 / -1;">
+                <span class="card-icon">📦</span>
+                <span class="card-label">CAJA</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard" class="section">
+        <div class="card" style="margin-top: 15px; padding: 0; margin-bottom: 15px;">
+            <div class="list-item" onclick="irACaja()" style="background: var(--primary-dark); color: white; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                <span style="font-size: 2.2rem; margin-right: 15px;">💰</span>
+                <span style="font-size: 1.2rem; font-weight: bold;">IR A CAJA</span>
+            </div>
+        </div>
+        <h3 style="color:var(--dark); margin-bottom:15px; font-weight:700;">Resumen General</h3>
+
+        <div class="dash-grid">
+            <div class="card card-red" onclick="mostrarSeccion('historial')">
+                <span class="card-icon">⚠️</span>
+                <span class="card-val" id="dash-pendientes">0</span>
+                <span class="card-label">Pendientes</span>
+            </div>
+            <div class="card card-blue" onclick="mostrarSeccion('facturar')">
+                <span class="card-icon">🧾</span>
+                <span class="card-label">Nuevo Recibo</span>
+            </div>
+            <div class="card card-blue" onclick="mostrarSeccion('usuarios')">
+                <span class="card-icon">👥</span>
+                <span class="card-label">Usuarios</span>
+            </div>
+            <div class="card card-green" onclick="mostrarSeccion('contabilidad')">
+                <span class="card-icon">📊</span>
+                <span class="card-label">Ingresos</span>
+            </div>
+            <div class="card card-red" onclick="mostrarSeccion('calle')">
+                <span class="card-icon">🚧</span>
+                <span class="card-label">Trabajo de Calle</span>
+            </div>
+        </div>
+        <div class="card card-dark" onclick="mostrarSeccion('ajustes')" style="display:flex; align-items:center; gap:15px;">
+            <span style="font-size:1.8rem;">⚙️</span>
+            <div>
+                <span style="font-size:1rem; font-weight:700; display:block;">Ajustes</span>
+                <small style="color:#777;">Respaldar información</small>
+            </div>
+        </div>
+    </div>
+
+    <div id="buscador-global" class="section">
+        <h2>🔍 Buscador General</h2>
+        <div class="card">
+            <label>Nombre del Cliente o Contador</label>
+            <input type="text" id="input-buscador-global" placeholder="Escribe para buscar..." onkeyup="ejecutarBusquedaGlobal()" autofocus>
+            <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.8rem;">Resultados en tiempo real</p>
+        </div>
+
+        <div id="resultados-globales"></div>
+
+        <div style="margin: 25px 0 15px; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
+
+        <div id="busqueda-vista-caserios" class="grid-caserios">
+            <div class="btn-caserio c-planes" onclick="abrirCaserioBusqueda('Los Planes')">
+                <div class="icon">🏡</div>
+                <h4>Los Planes</h4>
+            </div>
+            <div class="btn-caserio c-piletas" onclick="abrirCaserioBusqueda('Piletas')">
+                <div class="icon">💧</div>
+                <h4>Piletas</h4>
+            </div>
+            <div class="btn-caserio c-rosa" onclick="abrirCaserioBusqueda('Santa Rosa')">
+                <div class="icon">🌹</div>
+                <h4>Santa Rosa</h4>
+            </div>
+            <div class="btn-caserio c-venecia" onclick="abrirCaserioBusqueda('Venecia')">
+                <div class="icon">🚣</div>
+                <h4>Venecia</h4>
+            </div>
+        </div>
+
+        <div id="busqueda-vista-nombres" style="display:none;">
+            <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
+            <h4 id="busqueda-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+            <div id="busqueda-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
+        </div>
+    </div>
+
+    <div id="usuarios" class="section">
+
+        <div id="vista-caserios">
+            <h2 style="text-align:center; margin-bottom:20px;">Seleccione Caserío</h2>
+            <div class="grid-caserios">
+                <div class="btn-caserio c-planes" onclick="abrirCaserio('Los Planes')">
+                    <div class="icon">🏡</div>
+                    <h4>Los Planes</h4>
+                </div>
+                <div class="btn-caserio c-piletas" onclick="abrirCaserio('Piletas')">
+                    <div class="icon">💧</div>
+                    <h4>Piletas</h4>
+                </div>
+                <div class="btn-caserio c-rosa" onclick="abrirCaserio('Santa Rosa')">
+                    <div class="icon">🌹</div>
+                    <h4>Santa Rosa</h4>
+                </div>
+                <div class="btn-caserio c-venecia" onclick="abrirCaserio('Venecia')">
+                    <div class="icon">🚣</div>
+                    <h4>Venecia</h4>
+                </div>
+            </div>
+        </div>
+
+        <div id="vista-lista-caserio" style="display:none;">
+            <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:15px; border:none; padding-left:0;">← Volver a Caseríos</button>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 id="titulo-caserio-actual" style="margin:0;">Caserío</h2>
+                <span id="contador-usuarios-caserio" style="background:#eee; padding:5px 10px; border-radius:10px; font-size:0.8rem; font-weight:bold;">0</span>
+            </div>
+
+            <label>Buscar Cliente por Nombre o Contador</label>
+            <input type="text" id="input-search-caserio"
+                   placeholder="Escribe para filtrar clientes..."
+                   onkeyup="renderizarUsuariosCaserio()">
+            <button class="btn btn-primary" onclick="mostrarFormUsuario()">➕ Registrar en <span id="btn-txt-caserio"></span></button>
+
+            <div id="form-usuario" style="display:none; background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 2px solid var(--primary);">
+                <h3 id="titulo-form-usuario" style="margin-top:0;">Nuevo Usuario</h3>
+                <input type="hidden" id="u-id">
+
+                <label>Nombre Completo</label>
+                <input type="text" id="u-nombre" placeholder="Ej: Juan Pérez" autocapitalize="words">
+
+                <label>N° Contador</label>
+                <input type="tel" id="u-contador" placeholder="Ej: 12345">
+
+                <label>Dirección (Caserío)</label>
+                <input type="text" id="u-direccion" readonly style="background:#eee; color:#555;">
+
+                <button class="btn btn-success" id="btn-guardar-usuario" onclick="guardarUsuario()">Guardar</button>
+                <button class="btn btn-outline" onclick="irAtras()">Cancelar</button>
+            </div>
+
+            <div id="lista-usuarios"></div>
+        </div>
+
+    </div>
+
+    <div id="perfil-usuario" class="section">
+        <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:15px; border:none; padding-left:0; cursor:pointer; font-size:1rem;">
+            ← Volver
+        </button>
+        <div id="perfil-info" class="card" style="text-align:center;"></div>
+        <h3>Historial de Pagos</h3>
+        <div id="perfil-historial"></div>
+    </div>
+
+    <div id="facturar" class="section">
+        <h2>🧾 Facturación</h2>
+
+        <div id="aviso-ultimo-recibo" class="card card-blue" style="display:none;">
+            <p style="margin:0 0 8px; font-weight:800; color:var(--dark);">🧾 Último recibo generado</p>
+            <p id="aviso-ultimo-recibo-detalle" style="margin:0 0 14px; color:#555; font-size:0.9rem;"></p>
+            <div style="display:flex; gap:10px;">
+                <button type="button" class="btn btn-outline" style="margin:0;" onclick="corregirUltimoRecibo()">✏️ Corregir</button>
+                <button type="button" class="btn btn-danger" style="margin:0;" onclick="eliminarUltimoReciboDesdeFactura()">🗑️ Eliminar</button>
+            </div>
+            <div style="text-align:right; margin-top:8px;">
+                <span onclick="ocultarAvisoUltimoRecibo()" style="color:#999; font-size:0.8rem; cursor:pointer;">Ocultar aviso</span>
+            </div>
+        </div>
+
+        <label>Buscar Cliente por Nombre o Contador</label>
+        <input type="text" id="input-f-usuario-search"
+               placeholder="Escribe el nombre o el N° de contador"
+               onkeyup="filtrarUsuariosFactura()">
+
+        <div id="f-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
+            <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+        </div>
+
+        <div id="factura-caserio-browser">
+            <div style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
+
+            <div id="factura-vista-caserios" class="grid-caserios" style="margin-bottom:20px;">
+                <div class="btn-caserio c-planes" onclick="abrirCaserioFactura('Los Planes')">
+                    <div class="icon">🏡</div>
+                    <h4>Los Planes</h4>
+                </div>
+                <div class="btn-caserio c-piletas" onclick="abrirCaserioFactura('Piletas')">
+                    <div class="icon">💧</div>
+                    <h4>Piletas</h4>
+                </div>
+                <div class="btn-caserio c-rosa" onclick="abrirCaserioFactura('Santa Rosa')">
+                    <div class="icon">🌹</div>
+                    <h4>Santa Rosa</h4>
+                </div>
+                <div class="btn-caserio c-venecia" onclick="abrirCaserioFactura('Venecia')">
+                    <div class="icon">🚣</div>
+                    <h4>Venecia</h4>
+                </div>
+            </div>
+
+            <div id="factura-vista-nombres" style="display:none; margin-bottom:20px;">
+                <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
+                <h4 id="factura-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+                <div id="factura-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
+            </div>
+        </div>
+
+        <button type="button" id="btn-cambiar-cliente" class="btn-outline" onclick="irAtras()" style="display:none; width:auto; margin-bottom:15px;">🔄 Cambiar Cliente</button>
+
+        <input type="hidden" id="f-usuario-id">
+
+        <div id="factura-form-recibo" style="display:none;">
+            <div id="alerta-deuda" style="display:none; background:#fff8e1; color:#f57c00; padding:15px; border-radius:12px; margin-bottom:15px; border-left:4px solid #f57c00; font-size:0.9rem;"></div>
+
+            <div style="background: #e1f5fe; padding: 15px; border-radius: 12px; margin-bottom: 20px; display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span>Contador: <strong id="f-display-contador">---</strong></span>
+                <span>Ubicación: <strong id="f-display-dir">---</strong></span>
+            </div>
+
+            <div class="dash-grid">
+                <div><label>Lectura Anterior</label><input type="number" id="f-lectura-ant" oninput="calcularTotales()" value="0" pattern="\d*"></div>
+                <div><label>Lectura Actual</label><input type="number" id="f-lectura-act" oninput="calcularTotales()" pattern="\d*"></div>
+            </div>
+            <label>Consumo (m³)</label>
+            <input type="text" id="f-consumo" readonly style="background: #f5f5f5; font-weight: bold; color:#333;">
+            <label>Precio Unitario ($)</label>
+            <input type="number" id="f-precio" value="0.80" oninput="calcularTotales()" step="0.01">
+            <label>Mora / Saldo ($)</label>
+            <input type="number" id="f-mora" value="0.00" readonly style="background: #f5f5f5; font-weight: bold; color:#333;" step="0.01">
+            <label>Trabajo de Calle / Cargos Extra ($)</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" id="f-extra" value="0.00" step="0.01" readonly style="background:#f5f5f5; font-weight:bold; color:#333; flex:1; min-width:0;">
+                <button type="button" class="btn" style="width:auto; padding:10px 14px; font-size:0.85rem; background:#e65100; color:white; margin:0; white-space:nowrap; flex-shrink:0;" onclick="agregarCargoCalleDesdeFactura()">➕ Cargo</button>
+            </div>
+            <div id="extra-detalle-nota" style="display:none; margin-top:8px; margin-bottom:10px;"></div>
+            <div style="text-align: right; margin: 25px 0;">
+                <span style="font-size: 1rem; color: #666; font-weight:600;">TOTAL A PAGAR</span><br>
+                <span id="f-total-pagar" style="font-size: 3rem; font-weight: 800; color: var(--primary); letter-spacing:-1px;">$0.00</span>
+            </div>
+            <button class="btn btn-primary" id="btn-guardar-recibo" onclick="guardarRecibo()">💾 Generar Recibo</button>
+        </div>
+    </div>
+
+    <div id="cobrar" class="section">
+        <h2>💰 Cobrar</h2>
+        <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.85rem;">Busca al cliente y cobra sus recibos pendientes directamente.</p>
+
+        <button type="button" class="btn-recaudacion" onclick="mostrarRecaudacion()" style="max-width:340px; margin:0 auto 10px;">📊 Ver Recaudación</button>
+        <p style="text-align:center; margin:0 0 20px;">
+            <a href="javascript:void(0)" onclick="cambiarPasswordCobrar()" style="font-size:0.78rem; color:#888; text-decoration:underline;">🔑 Cambiar contraseña de acceso a Cobrar</a>
+        </p>
+
+        <label>Buscar Cliente por Nombre o Contador</label>
+        <input type="text" id="input-c-usuario-search"
+               placeholder="Escribe el nombre o el N° de contador"
+               onkeyup="filtrarUsuariosCobrar()">
+
+        <div id="c-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
+            <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+        </div>
+
+        <div id="cobrar-caserio-browser">
+            <div style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
+
+            <div id="cobrar-vista-caserios" class="grid-caserios" style="margin-bottom:20px;">
+                <div class="btn-caserio c-planes" onclick="abrirCaserioCobrar('Los Planes')">
+                    <div class="icon">🏡</div>
+                    <h4>Los Planes</h4>
+                </div>
+                <div class="btn-caserio c-piletas" onclick="abrirCaserioCobrar('Piletas')">
+                    <div class="icon">💧</div>
+                    <h4>Piletas</h4>
+                </div>
+                <div class="btn-caserio c-rosa" onclick="abrirCaserioCobrar('Santa Rosa')">
+                    <div class="icon">🌹</div>
+                    <h4>Santa Rosa</h4>
+                </div>
+                <div class="btn-caserio c-venecia" onclick="abrirCaserioCobrar('Venecia')">
+                    <div class="icon">🚣</div>
+                    <h4>Venecia</h4>
+                </div>
+            </div>
+
+            <div id="cobrar-vista-nombres" style="display:none; margin-bottom:20px;">
+                <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
+                <h4 id="cobrar-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+                <div id="cobrar-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
+            </div>
+        </div>
+
+        <button type="button" id="btn-cambiar-cliente-cobrar" class="btn-outline" onclick="irAtras()" style="display:none; width:auto; margin-bottom:15px;">🔄 Cambiar Cliente</button>
+
+        <input type="hidden" id="c-usuario-id">
+
+        <div id="cobrar-info-cliente" style="display:none;">
+            <div style="background: #e1f5fe; padding: 15px; border-radius: 12px; margin-bottom: 20px; display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span>Contador: <strong id="c-display-contador">---</strong></span>
+                <span>Ubicación: <strong id="c-display-dir">---</strong></span>
+            </div>
+            <div id="cobrar-lista-pendientes"></div>
+        </div>
+    </div>
+
+    <div id="calle" class="section">
+        <h2>🚧 Trabajo de Calle</h2>
+        <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.85rem;">
+            Registra un cargo por inasistencia. Se sumará automáticamente la próxima vez que se le genere un recibo de agua a ese usuario, y aparecerá en su ticket.
+        </p>
+
+        <div id="calle-vista-caserios" class="grid-caserios" style="margin-bottom:20px;">
+            <div class="btn-caserio c-planes" onclick="abrirCaserioCalle('Los Planes')">
+                <div class="icon">🏡</div>
+                <h4>Los Planes</h4>
+            </div>
+            <div class="btn-caserio c-piletas" onclick="abrirCaserioCalle('Piletas')">
+                <div class="icon">💧</div>
+                <h4>Piletas</h4>
+            </div>
+            <div class="btn-caserio c-rosa" onclick="abrirCaserioCalle('Santa Rosa')">
+                <div class="icon">🌹</div>
+                <h4>Santa Rosa</h4>
+            </div>
+            <div class="btn-caserio c-venecia" onclick="abrirCaserioCalle('Venecia')">
+                <div class="icon">🚣</div>
+                <h4>Venecia</h4>
+            </div>
+        </div>
+
+        <div id="calle-vista-nombres" style="display:none;">
+            <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
+            <h4 id="calle-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+            <input type="text" id="input-search-calle" placeholder="Buscar por nombre..." style="margin-bottom:15px;" onkeyup="renderizarNombresCalle()">
+            <div id="calle-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
+        </div>
+    </div>
+
+    <div id="historial" class="section">
+        <h2>📂 Historial</h2>
+        <div class="filter-bar" style="grid-template-columns: 1fr 1fr 1fr;">
+            <select id="filtro-anio" onchange="renderizarRecibos()"></select>
+            <select id="filtro-mes" onchange="renderizarRecibos()">
+                <option value="todos">Mes</option>
+                <option value="1">Ene</option> <option value="2">Feb</option> <option value="3">Mar</option>
+                <option value="4">Abr</option> <option value="5">May</option> <option value="6">Jun</option>
+                <option value="7">Jul</option> <option value="8">Ago</option> <option value="9">Sep</option>
+                <option value="10">Oct</option> <option value="11">Nov</option> <option value="12">Dic</option>
+            </select>
+            <select id="filtro-estado" onchange="renderizarRecibos()">
+                <option value="todos">Estado</option>
+                <option value="pendiente">Debe</option>
+                <option value="pagado">Pagó</option>
+            </select>
+        </div>
+        <div id="lista-recibos"></div>
+    </div>
+
+    <div id="contabilidad" class="section">
+        <h2>📊 Ingresos</h2>
+        <div class="filter-bar" style="background:#e1f5fe; border: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+            <div style="grid-column: span 3; margin-bottom: 5px;">
+                <label style="color:#0277bd; font-size: 0.9rem;">Periodo a Consultar:</label>
+            </div>
+
+            <select id="cont-anio" onchange="actualizarResumenContable()"></select>
+
+            <select id="cont-mes" onchange="actualizarResumenContable()">
+                <option value="todos">Todo el Año</option>
+                <option value="1">Ene</option> <option value="2">Feb</option> <option value="3">Mar</option>
+                <option value="4">Abr</option> <option value="5">May</option> <option value="6">Jun</option>
+                <option value="7">Jul</option> <option value="8">Ago</option> <option value="9">Sep</option>
+                <option value="10">Oct</option> <option value="11">Nov</option> <option value="12">Dic</option>
+            </select>
+
+            <select id="cont-dia" onchange="actualizarResumenContable()">
+                <option value="todos">Todo el Mes</option>
+            </select>
+        </div>
+
+        <div class="card card-green" style="text-align: center; border-left:none; border-top: 6px solid var(--secondary);">
+            <p style="margin:0; color:#666; font-size:0.8rem; text-transform:uppercase;">Recaudado</p>
+            <div style="font-size: 3rem; font-weight: 800; color: var(--secondary); margin: 5px 0;" id="cont-total-periodo">$0.00</div>
+            <p style="margin:0; font-size:0.8rem; color:#888;" id="cont-texto-periodo">Seleccione filtros</p>
+        </div>
+        <table>
+            <thead><tr><th>Fecha</th><th>Cliente</th><th>Monto</th></tr></thead>
+            <tbody id="tabla-contabilidad"></tbody>
+        </table>
+    </div>
+
+
+    <div id="ajustes" class="section">
+        <h2>⚙️ Configuración</h2>
+
+        <h4 style="margin:0 0 10px 0; font-weight:700;">📂 Migración Lite (Solo Clientes)</h4>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Exportar Base Clientes (Lite)</h4>
+            <button class="btn btn-primary" onclick="exportarClientesSimplificado()">⬇️ Exportar Clientes</button>
+        </div>
+
+        <div class="card card-green" style="margin-top:15px;">
+            <h4 style="margin:0 0 10px 0;">Cargar Base Clientes (Lite)</h4>
+            <input type="file" id="input-restore-lite" style="display:none" onchange="procesarImportacionClientes(this)">
+            <button class="btn btn-success" onclick="document.getElementById('input-restore-lite').click()">⬆️ Cargar Clientes</button>
+        </div>
+
+        <h4 style="margin:25px 0 10px 0; font-weight:700;">💾 Copia de Seguridad Completa</h4>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Copia de Seguridad Completa</h4>
+            <button class="btn btn-primary" onclick="descargarBackup()">📥 Guardar Archivo</button>
+        </div>
+
+        <div class="card card-green" style="margin-top:15px;">
+            <h4 style="margin:0 0 10px 0;">Restaurar Copia Completa</h4>
+            <input type="file" id="input-restore" style="display:none" onchange="procesarRestauracion(this)">
+            <button class="btn btn-success" onclick="document.getElementById('input-restore').click()">📤 Cargar Archivo</button>
+        </div>
+
+        <h4 style="margin:25px 0 10px 0; font-weight:700;">🔑 Seguridad de Acceso</h4>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Contraseña de Caja / Ajustes / Ingresos</h4>
+            <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                Esta contraseña protege Inicio, Usuarios, Historial, Ingresos, Ajustes y CAJA. "Buscar" y "Recibo" quedan libres para el personal que solo entrega recibos. "Cobrar" tiene su propia contraseña independiente (ver abajo).
+            </p>
+            <button class="btn btn-primary" onclick="cambiarPasswordAdmin()">🔑 Cambiar Contraseña</button>
+        </div>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Contraseña de Cobrar</h4>
+            <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                Contraseña independiente y exclusiva para entrar a la sección "💰 Cobrar". No afecta ni comparte la contraseña de Caja/Ajustes. Por defecto es <b>cobro2026</b>.
+            </p>
+            <button class="btn btn-primary" onclick="cambiarPasswordCobrar()">🔑 Cambiar Contraseña de Cobrar</button>
+        </div>
+
+        <h4 style="margin:25px 0 10px 0; font-weight:700;">💣 Zona de Peligro</h4>
+
+        <div class="card card-red">
+            <h4 style="margin:0 0 10px 0; color:var(--danger);">⚠️ Borrar Todos los Datos</h4>
+            <button class="btn btn-danger" onclick="borrarTodo()">💣 BORRAR TODO</button>
+        </div>
+        <div style="margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px;">
+            <h3 style="text-align:center;">☁️ Sincronización en la Nube</h3>
+            <div class="card card-blue" style="text-align:center;">
+                <p id="sync-status-detalle" style="margin:0; font-weight:700;">🔄 Conectando...</p>
+                <p style="margin:8px 0 0; font-size:0.8rem; color:#666;">
+                    Los datos se guardan automáticamente en la nube en tiempo real. Ya no necesitas subir ni bajar copias manualmente entre celulares.
+                </p>
+                <p id="sync-usuario-actual" style="margin:10px 0 0; font-size:0.8rem; color:#666;"></p>
+                <button class="btn btn-outline" style="margin-top:12px;" onclick="cerrarSesion()">🔒 Cerrar sesión</button>
+            </div>
+            <div class="card card-green" style="text-align:center; margin-top:15px;">
+                <h4 style="margin:0 0 8px 0;">📦 Enviar Cobros Antiguos a Caja</h4>
+                <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                    Usa esto UNA sola vez si restauraste un backup viejo (como el de Google Sheets) y ves el total recaudado en "Ingresos" pero no aparece en Caja. Es seguro ejecutarlo varias veces: no duplica.
+                </p>
+                <button class="btn" style="background-color:#2e7d32; color:white;" onclick="migrarContabilidadACaja()">📤 Enviar a Caja</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="ticket-container">
+        <div id="t-sello-cancelado" style="display:none; text-align:center; font-weight:bold; font-size:15px; border:2px solid black; padding:4px; margin-bottom:6px; letter-spacing:1px;">*** RECIBO CANCELADO ***</div>
+        <div class="ticket-header">
+            <h3 style="margin:0;">ACOMAACAP</h3>
+            <p style="margin:2px 0; font-size:10px;">Cantón Las Piletas, Santa Ana Este</p>
+            <p style="margin:2px 0; font-size:10px;">Distrito de Coatepeque, Santa Ana</p>
+            <p style="margin:5px 0; font-weight:bold;">RECIBO DE AGUA</p>
+            <p style="margin:0; font-size:11px;">#: <span id="t-numero">001</span> | <span id="t-fecha">--/--/--</span></p>
+            <p id="t-fila-fecha-pago" style="display:none; margin:2px 0; font-size:10px;">Pagado: <span id="t-fecha-pago"></span></p>
+            <p style="margin:2px 0; font-size:11px; font-weight:bold; border:1px solid #000; padding:2px; margin-top:5px;">MES: <span id="t-mes-facturado">---</span></p>
+        </div>
+        <div style="margin-bottom: 5px; border-bottom: 1px dashed black;">
+            <p style="font-size:12px;"><strong>Cliente:</strong> <span id="t-cliente">Nombre</span></p>
+            <p style="font-size:12px;"><strong>Ubicación:</strong> <span id="t-direccion">---</span></p>
+            <p style="font-size:12px;"><strong>Contador:</strong> <span id="t-contador">0000</span></p>
+        </div>
+        <div class="ticket-row"><span>Periodo:</span><span id="t-periodo">--- al ---</span></div>
+        <div class="ticket-row"><span>Lect. Actual:</span><span id="t-lectura-act">0</span></div>
+        <div class="ticket-row"><span>Lect. Anterior:</span><span id="t-lectura-ant">0</span></div>
+        <div class="ticket-row"><span>Consumo:</span><span id="t-consumo">0</span></div>
+        <div class="ticket-row"><span>Precio:</span><span id="t-precio">$0.80</span></div>
+        <div style="border-top: 1px dashed #ccc; margin: 2px 0;"></div>
+        <div class="ticket-row"><span>Subtotal:</span><span id="t-subtotal">$0.00</span></div>
+        <div class="ticket-row" id="t-fila-extra" style="display:none;"><span>Trabajo de Calle:</span><span id="t-extra">$0.00</span></div>
+        <div class="ticket-row"><span id="t-label-mora">Saldo Ant/Mora:</span><span id="t-mora">$0.00</span></div>
+        <div id="t-fila-mora-detalle" style="display:none; font-size:9px; color:#333; margin:-3px 0 3px;">Corresponde a: <span id="t-mora-detalle"></span></div>
+        <div class="ticket-total"><span id="t-label-total">TOTAL</span>: <span id="t-total">$0.00</span></div>
+
+        <div id="t-aviso-mora" style="text-align:center; font-weight:bold; color:black; font-size:10px; padding:5px; margin-top:10px; border: 1px dashed black;"></div>
+
+        <div class="ticket-footer"><p id="t-footer-linea1">¡GRACIAS POR SU PAGO!</p>
+            <p id="t-footer-linea2">Recuerede que tiene 7 dias habiles para pagar su factura despues de haber sido entregada</p></div>
+    </div>
+
+</div><!-- /#app-content -->
+
+    <script>
+        let usuarios = JSON.parse(localStorage.getItem('agua_usuarios')) || [];
+        let recibos = JSON.parse(localStorage.getItem('agua_recibos')) || [];
+
+        // Total real de un recibo: consumo de agua + cargos de Trabajo de Calle (si los tiene).
+        function totalRecibo(r) {
+            return (parseFloat(r.total) || 0) + (parseFloat(r.extra) || 0);
+        }
+        let contabilidad = JSON.parse(localStorage.getItem('agua_contabilidad')) || [];
+
+        // NUEVO: Contador de recibos, inicia en 0 si no existe.
+        let lastReciboNum = parseInt(localStorage.getItem('agua_last_recibo_num')) || 0;
+
+        // VARIABLES DE ESTADO
+        let reciboEditandoId = null;
+        let ultimoReciboGeneradoId = null; // Guarda el ID del recibo recién generado, para poder corregirlo/eliminarlo sin ir a Historial
+        let usuarioEditandoId = null;
+        let caserioSeleccionado = null;
+        let usuarioActualCaserio = null;
+        let vengoDelBuscador = false; // <-- VARIABLE para el retorno inteligente
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarFiltrosFecha(); actualizarDashboard(); cargarSelectUsuarios();
+        });
+
+        // ============ CONTROL DE ACCESO POR CONTRASEÑA ============
+        // Contraseña configurable desde Ajustes (se guarda en este dispositivo).
+        // Si nunca se ha configurado, se usa esta por defecto la primera vez.
+        const ADMIN_PASS_DEFAULT = 'CAJA2025';
+        const ADMIN_PASS_STORAGE_KEY = 'acomaacap_admin_pass';
+
+        function obtenerPasswordAdmin() {
+            return localStorage.getItem(ADMIN_PASS_STORAGE_KEY) || ADMIN_PASS_DEFAULT;
+        }
+
+        // Secciones que NO requieren contraseña (uso libre para personal ajeno a contabilidad)
+        const SECCIONES_LIBRES = ['facturar', 'buscador-global', 'menu-principal', 'cobrar'];
+
+        function accesoAdminDesbloqueado() {
+            return sessionStorage.getItem('admin_unlocked') === '1';
+        }
+
+        // Ejecuta la acción solo si la contraseña es correcta (o ya estaba desbloqueada en esta sesión)
+        function verificarAccesoAdmin(accionOk) {
+            if (accesoAdminDesbloqueado()) { accionOk(); return; }
+            const password = prompt("🔒 Ingrese la contraseña de acceso:");
+            if (password === null) return; // Canceló
+            if (password === obtenerPasswordAdmin()) {
+                sessionStorage.setItem('admin_unlocked', '1');
+                accionOk();
+            } else {
+                alert("❌ Contraseña incorrecta. Acceso denegado.");
+            }
+        }
+
+        // Acceso a Caja Chica (caja.html)
+        function irACaja() {
+            verificarAccesoAdmin(() => { window.location.href = 'caja.html'; });
+        }
+
+        // Permite al administrador cambiar la contraseña de acceso desde Ajustes
+        function cambiarPasswordAdmin() {
+            const actual = prompt("Ingrese la contraseña ACTUAL para poder cambiarla:");
+            if (actual === null) return;
+            if (actual !== obtenerPasswordAdmin()) {
+                alert("❌ Contraseña actual incorrecta.");
+                return;
+            }
+            const nueva = prompt("Ingrese la NUEVA contraseña:");
+            if (nueva === null || nueva.trim() === '') return;
+            const confirmar = prompt("Confirme la NUEVA contraseña:");
+            if (nueva !== confirmar) {
+                alert("❌ Las contraseñas no coinciden. No se realizó ningún cambio.");
+                return;
+            }
+            localStorage.setItem(ADMIN_PASS_STORAGE_KEY, nueva);
+            alert("✅ Contraseña actualizada correctamente.");
+        }
+        // ============================================================
+
+        // ============ CONTROL DE ACCESO INDEPENDIENTE: COBRAR ============
+        // Contraseña propia y separada de la de Caja/Ajustes/Ingresos, exclusiva
+        // para abrir la sección "💰 Cobrar" desde el Menú Principal.
+        const COBRAR_PASS_DEFAULT = 'cobro2026';
+        const COBRAR_PASS_STORAGE_KEY = 'acomaacap_cobrar_pass';
+
+        function obtenerPasswordCobrar() {
+            return localStorage.getItem(COBRAR_PASS_STORAGE_KEY) || COBRAR_PASS_DEFAULT;
+        }
+
+        function accesoCobrarDesbloqueado() {
+            return sessionStorage.getItem('cobrar_unlocked') === '1';
+        }
+
+        function verificarAccesoCobrar(accionOk) {
+            if (accesoCobrarDesbloqueado()) { accionOk(); return; }
+            const password = prompt("🔒 Ingrese la contraseña para Cobrar:");
+            if (password === null) return; // Canceló
+            if (password === obtenerPasswordCobrar()) {
+                sessionStorage.setItem('cobrar_unlocked', '1');
+                accionOk();
+            } else {
+                alert("❌ Contraseña incorrecta. Acceso denegado.");
+            }
+        }
+
+        // Permite cambiar la contraseña de Cobrar (independiente de la de Caja). Se puede
+        // usar tanto desde dentro de Cobrar como desde Ajustes.
+        function cambiarPasswordCobrar() {
+            const actual = prompt("Ingrese la contraseña ACTUAL de Cobrar para poder cambiarla:");
+            if (actual === null) return;
+            if (actual !== obtenerPasswordCobrar()) {
+                alert("❌ Contraseña actual incorrecta.");
+                return;
+            }
+            const nueva = prompt("Ingrese la NUEVA contraseña de Cobrar:");
+            if (nueva === null || nueva.trim() === '') return;
+            const confirmar = prompt("Confirme la NUEVA contraseña:");
+            if (nueva !== confirmar) {
+                alert("❌ Las contraseñas no coinciden. No se realizó ningún cambio.");
+                return;
+            }
+            localStorage.setItem(COBRAR_PASS_STORAGE_KEY, nueva);
+            alert("✅ Contraseña de Cobrar actualizada correctamente.");
+        }
+        // ============================================================
+
+        // Limpia por completo la pantalla de Facturación (cliente seleccionado, lecturas, montos, búsqueda).
+        // Se usa al salir de la sección "facturar" hacia cualquier otra, para que el siguiente
+        // ingreso a Facturación siempre empiece en blanco.
+        function limpiarPantallaFacturacion() {
+            const idOculto = document.getElementById('f-usuario-id');
+            const busqueda = document.getElementById('input-f-usuario-search');
+            const resultados = document.getElementById('f-usuario-resultados');
+            if (idOculto) idOculto.value = '';
+            if (busqueda) busqueda.value = '';
+            if (resultados) resultados.innerHTML = '';
+            if (typeof volverCaseriosFactura === 'function') volverCaseriosFactura();
+            if (typeof cargarDatosUsuarioFactura === 'function') cargarDatosUsuarioFactura();
+            if (typeof ocultarAvisoUltimoRecibo === 'function') ocultarAvisoUltimoRecibo();
+            reciboEditandoId = null;
+        }
+
+       // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+        // Pila de navegación paso a paso, usada por el botón flotante "⬅️ Atrás".
+        // Cada elemento guardado es una función que restaura exactamente la pantalla anterior
+        // (ya sea otra sección, un caserío, una ficha de usuario o un formulario).
+        let pilaAtras = [];
+        let navegandoAtras = false; // evita que un paso de retroceso se vuelva a registrar a sí mismo
+
+        function registrarPasoAtras(fn) {
+            if (navegandoAtras) return;
+            pilaAtras.push(fn);
+        }
+
+        function mostrarSeccion(id, skipCheck = false, esRetroceso = false) {
+            // "Cobrar" tiene su propia contraseña independiente (no la de Caja/Ajustes)
+            if (id === 'cobrar' && !skipCheck && !accesoCobrarDesbloqueado()) {
+                verificarAccesoCobrar(() => mostrarSeccion(id, true));
+                return;
+            }
+
+            // Interceptamos el acceso a cualquier sección protegida (todo excepto Buscar y Recibo)
+            if (!SECCIONES_LIBRES.includes(id) && !skipCheck && !accesoAdminDesbloqueado()) {
+                verificarAccesoAdmin(() => mostrarSeccion(id, true));
+                return; // Detenemos la ejecución
+            }
+
+            const seccionActualPrevia = document.querySelector('.section.active');
+
+            // Registramos cómo volver a la sección de la que veníamos (solo en navegación hacia adelante)
+            if (!esRetroceso && seccionActualPrevia && seccionActualPrevia.id !== id) {
+                const idAnterior = seccionActualPrevia.id;
+                registrarPasoAtras(() => mostrarSeccion(idAnterior, true, true));
+            }
+
+            // Si estábamos en Facturación y nos vamos a otra sección, limpiamos esa pantalla
+            // (evita que el cliente/lecturas anteriores sigan visibles al regresar).
+            if (seccionActualPrevia && seccionActualPrevia.id === 'facturar' && id !== 'facturar') {
+                limpiarPantallaFacturacion();
+            }
+
+            // --- LIMPIEZA Y NAVEGACIÓN NORMAL ---
+
+            // Limpieza total (evita encimado)
+            document.querySelectorAll('.section').forEach(s => {
+                s.classList.remove('active');
+                s.style.display = '';
+            });
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            // Activar la nueva sección
+            const seccionNueva = document.getElementById(id);
+            if(seccionNueva) seccionNueva.classList.add('active');
+
+            // Mostrar/ocultar los botones flotantes "Atrás" y "Menú principal" (no aplican en el menú principal)
+            const btnAtras = document.getElementById('btn-atras');
+            const btnIrMenu = document.getElementById('btn-ir-menu');
+            const enMenuPrincipal = (id === 'menu-principal');
+            if (btnAtras) btnAtras.style.display = enMenuPrincipal ? 'none' : 'flex';
+            if (btnIrMenu) btnIrMenu.style.display = enMenuPrincipal ? 'none' : 'flex';
+
+            if(id === 'buscador-global') {
+                document.getElementById('input-buscador-global').value = '';
+                document.getElementById('resultados-globales').innerHTML = '';
+                ejecutarBusquedaGlobal();
+            }
+
+            // Lógica específica al entrar a cada sección
+            if(id === 'usuarios') volverACaserios();
+            if(id === 'dashboard') actualizarDashboard();
+            if(id === 'historial') renderizarRecibos();
+            if(id === 'cobrar') {
+                // Siempre entra "en blanco": obliga a volver a seleccionar el cliente,
+                // así no queda visible el cobro de la última persona atendida.
+                document.getElementById('input-c-usuario-search').value = '';
+                document.getElementById('c-usuario-resultados').innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
+                mostrarBuscadorCaserioCobrar();
+            }
+
+            // Si llegamos aquí, la navegación es directa o la contraseña fue correcta
+            if(id === 'contabilidad') { cargarFiltrosContabilidad(); actualizarResumenContable(); }
+        }
+
+        // Botón 🏠 : va directo al menú principal y descarta toda la pila de retroceso
+        function irMenuPrincipal() {
+            pilaAtras = [];
+            mostrarSeccion('menu-principal', true, true);
+        }
+
+        // Botón ⬅️ : retrocede un paso REAL a la vez (sección, caserío, ficha, formulario, cliente...)
+        function irAtras() {
+            if (pilaAtras.length > 0) {
+                const paso = pilaAtras.pop();
+                navegandoAtras = true;
+                try { paso(); } finally { navegandoAtras = false; }
+            } else {
+                mostrarSeccion('menu-principal', true, true);
+            }
+        }
+
+        function obtenerMesAnio(fechaStr) {
+            const partes = fechaStr.split('/');
+            return partes.length === 3 ? { mes: parseInt(partes[1]), anio: parseInt(partes[2]) } : { mes: 0, anio: 0 };
+        }
+        function cargarFiltrosFecha() {
+            const anio = new Date().getFullYear();
+            document.getElementById('filtro-anio').innerHTML = `<option value="todos">Año</option><option value="${anio}" selected>${anio}</option><option value="${anio-1}">${anio-1}</option>`;
+        }
+
+        // --- NUEVA LÓGICA DE CASERÍOS ---
+        function abrirCaserio(nombre) {
+            registrarPasoAtras(() => volverACaserios());
+            caserioSeleccionado = nombre;
+            document.getElementById('vista-caserios').style.display = 'none';
+            document.getElementById('vista-lista-caserio').style.display = 'block';
+
+            document.getElementById('titulo-caserio-actual').innerText = nombre;
+            document.getElementById('btn-txt-caserio').innerText = nombre;
+
+            renderizarUsuariosCaserio();
+        }
+
+        function volverACaserios() {
+            caserioSeleccionado = null;
+            document.getElementById('vista-caserios').style.display = 'block';
+            document.getElementById('vista-lista-caserio').style.display = 'none';
+            document.getElementById('perfil-usuario').style.display = 'none'; // Ocultar perfil si estaba abierto
+            ocultarFormUsuario();
+
+            // 🔑 LIMPIAR BARRA DE BÚSQUEDA AL VOLVER
+            const searchInput = document.getElementById('input-search-caserio');
+            if (searchInput) {
+                searchInput.value = '';
+            }
+        }
+
+        // ⚠️ FUNCIÓN REEMPLAZADA: Añade lógica de filtrado en tiempo real
+        function renderizarUsuariosCaserio() {
+            if(!caserioSeleccionado) return;
+            const div = document.getElementById('lista-usuarios');
+            div.innerHTML = '';
+
+            // 🔑 1. OBTENER TEXTO DE BÚSQUEDA
+            const inputElement = document.getElementById('input-search-caserio');
+            const textoBusqueda = inputElement ? inputElement.value.toLowerCase() : '';
+
+            // 2. Filtramos: Por caserío
+            const listaBase = usuarios.filter(u => u.direccion === caserioSeleccionado);
+
+            let listaFiltrada;
+            if (textoBusqueda) {
+                // Filtramos también por nombre o contador
+                listaFiltrada = listaBase.filter(u =>
+                    u.nombre.toLowerCase().includes(textoBusqueda) ||
+                    u.contador.includes(textoBusqueda)
+                );
+            } else {
+                listaFiltrada = listaBase;
+            }
+
+            // 🔑 Ordenar la lista por nombre alfabéticamente
+            listaFiltrada.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            document.getElementById('contador-usuarios-caserio').innerText = listaFiltrada.length + " usuarios";
+
+            if(listaFiltrada.length === 0) {
+                div.innerHTML = `<p style="text-align:center; color:#999; margin-top:20px;">No hay usuarios que coincidan con la búsqueda en ${caserioSeleccionado}.</p>`;
+                return;
+            }
+
+            // ... (el bucle forEach que genera el HTML sigue igual) ...
+            listaFiltrada.forEach(u => {
+                const debe = recibos.some(r => r.usuarioId == u.id && r.estado === 'pendiente');
+                const icon = debe ? '<span style="color:var(--danger); font-size:0.8rem;">⚠️ Debe</span>' : '';
+                div.innerHTML += `
+                    <div class="list-item">
+                        <div style="margin-bottom:10px;">
+                            <strong style="font-size:1.1rem;">${u.nombre}</strong> ${icon}<br>
+                            <span style="color:#666; font-size:0.9rem;">Contador: <strong>${u.contador}</strong></span>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                             <button class="btn-bt" style="margin:0; padding:10px; font-size:0.9rem;" onclick="mostrarPerfilUsuario(${u.id})">👁️ Historial</button>
+                             <button class="btn-outline" style="margin:0; padding:10px; font-size:0.9rem;" onclick="iniciarFacturaUsuario(${u.id})">🧾 Facturar</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
+                            <button class="btn-primary" style="margin:0; padding:10px;" onclick="editarUsuario(${u.id})">✏️ Editar</button>
+                            <button class="btn-danger" style="margin:0; padding:10px;" onclick="eliminarUsuario(${u.id})">🗑️ Borrar</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // --- FORMULARIO USUARIOS ---
+        function mostrarFormUsuario() {
+            const formYaVisible = document.getElementById('form-usuario').style.display === 'block';
+            if (!formYaVisible) registrarPasoAtras(() => ocultarFormUsuario());
+            document.getElementById('form-usuario').style.display = 'block';
+            document.getElementById('u-id').value = '';
+            document.getElementById('u-nombre').value = '';
+            document.getElementById('u-contador').value = '';
+            // Fijamos la dirección con el caserío actual y la bloqueamos
+            document.getElementById('u-direccion').value = caserioSeleccionado;
+
+            document.getElementById('titulo-form-usuario').innerText = "Nuevo Usuario en " + caserioSeleccionado;
+            usuarioEditandoId = null;
+        }
+
+        function ocultarFormUsuario() { document.getElementById('form-usuario').style.display = 'none'; }
+
+        function guardarUsuario() {
+            const n = document.getElementById('u-nombre').value; const c = document.getElementById('u-contador').value;
+            const d = document.getElementById('u-direccion').value; // Toma el valor fijo
+
+            if(!n || !c) return alert("Faltan datos");
+
+            let usuarioGuardado;
+            if (usuarioEditandoId) {
+                const ix = usuarios.findIndex(u => u.id === usuarioEditandoId);
+                if(ix > -1) { usuarios[ix].nombre = n; usuarios[ix].contador = c; usuarios[ix].direccion = d; usuarioGuardado = usuarios[ix]; }
+            } else { usuarioGuardado = { id: Date.now(), nombre: n, contador: c, direccion: d }; usuarios.push(usuarioGuardado); }
+            localStorage.setItem('agua_usuarios', JSON.stringify(usuarios)); ocultarFormUsuario(); renderizarUsuariosCaserio(); cargarSelectUsuarios();
+            if(usuarioGuardado && typeof syncUsuario === 'function') syncUsuario(usuarioGuardado);
+        }
+
+        function editarUsuario(id) {
+            const u = usuarios.find(x => x.id === id); if(!u) return;
+            mostrarFormUsuario(); usuarioEditandoId = id;
+            document.getElementById('u-nombre').value = u.nombre;
+            document.getElementById('u-contador').value = u.contador;
+            document.getElementById('u-direccion').value = u.direccion;
+            document.getElementById('titulo-form-usuario').innerText = "Editar Datos";
+        }
+
+        function eliminarUsuario(id) {
+            if(!confirm("⚠️ ¿Eliminar usuario?")) return;
+            const ix = usuarios.findIndex(u => u.id === id);
+            if(ix > -1) { usuarios.splice(ix, 1); localStorage.setItem('agua_usuarios', JSON.stringify(usuarios)); renderizarUsuariosCaserio(); cargarSelectUsuarios(); if(typeof eliminarUsuarioNube === 'function') eliminarUsuarioNube(id); }
+        }
+
+        // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+        function mostrarPerfilUsuario(id, desdeBuscador = false) {
+            registrarPasoAtras(() => cerrarPerfil());
+            vengoDelBuscador = desdeBuscador; // <-- Captura si venimos del buscador global
+            const u = usuarios.find(x => x.id === id); if(!u) return;
+            usuarioActualCaserio = u.direccion;
+
+            // Usamos la navegación limpia
+            document.querySelectorAll('.section').forEach(s => { s.classList.remove('active'); s.style.display = ''; });
+            document.getElementById('perfil-usuario').classList.add('active');
+
+            // Llenado del perfil
+            const susRecibos = recibos.filter(r => r.usuarioId == id).reverse();
+            const deuda = susRecibos.filter(r => r.estado === 'pendiente').reduce((a, r) => a + totalRecibo(r), 0);
+
+            document.getElementById('perfil-info').innerHTML = `
+                <h2 style="margin:0;">${u.nombre}</h2>
+                <p style="color:#666;">${u.direccion}</p>
+                <div style="padding:10px; border-radius:8px; background:${deuda>0?'#ffebee':'#e8f5e9'}; color:${deuda>0?'#c62828':'#2e7d32'}; font-weight:bold; margin-top:10px;">
+                    ${deuda > 0 ? `Deuda Total: $${deuda.toFixed(2)}` : '✅ Al día'}
+                </div>`;
+
+            const listDiv = document.getElementById('perfil-historial'); listDiv.innerHTML = '';
+            susRecibos.forEach(r => {
+                const pag = r.estado === 'pagado';
+                listDiv.innerHTML += `
+                <div class="list-item" style="border-left:5px solid ${pag?'var(--secondary)':'var(--danger)'}">
+                    <div style="display:flex; justify-content:space-between;">
+                        <strong>${r.mesFacturado||r.fecha}</strong>
+                        <span class="status-badge ${pag?'pagado':'pendiente'}">${pag?'PAGADO':'DEBE'}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-top:5px; align-items:center;">
+                        <span>Total: <strong>$${totalRecibo(r).toFixed(2)}</strong>${parseFloat(r.extra) > 0 ? ' <small style="color:#e65100;">(incl. $' + parseFloat(r.extra).toFixed(2) + ' Trabajo de Calle)</small>' : ''}</span>
+                        ${!pag ? '' : `<small>${r.fecha}</small>`}
+                    </div>
+                    <div style="text-align:right; margin-top:8px;">
+                        <button class="btn-bt" onclick="imprimirBluetooth(${r.id})" style="width:auto; display:inline-block; padding:5px 10px; margin:0; font-size:0.8rem;">📱</button>
+                        <button class="btn-primary" onclick="imprimirPDF(${r.id})" style="width:auto; display:inline-block; padding:5px 10px; margin:0; font-size:0.8rem;">📄</button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+        function cerrarPerfil() {
+            if(vengoDelBuscador) {
+                // Regresa al Buscador General
+                mostrarSeccion('buscador-global');
+            } else {
+                // Regresa a la lista de Abonados (Casero)
+                mostrarSeccion('usuarios');
+                // Re-abre la lista del caserío para ver dónde estaba
+                document.getElementById('vista-caserios').style.display='none';
+                document.getElementById('vista-lista-caserio').style.display='block';
+            }
+        }
+
+        // --- FACTURACIÓN Y COBROS (MODIFICADAS PARA BUSCAR POR TEXTO) ---
+
+        // Esta función ya no llena un <select>, solo existe para compatibilidad de inicialización
+        function cargarSelectUsuarios() { /* No hace nada */ }
+
+        // Función que inicia la factura (usada desde otros botones)
+        function iniciarFacturaUsuario(id) {
+            mostrarSeccion('facturar');
+            // Llenamos el campo oculto y llamamos a cargar datos
+            document.getElementById('f-usuario-id').value = id;
+
+            // Buscamos el nombre del usuario y lo ponemos en el input visible para UX
+            const u = usuarios.find(x => x.id == id);
+            if (u) {
+                document.getElementById('input-f-usuario-search').value = `${u.nombre} (${u.contador})`;
+                document.getElementById('f-usuario-resultados').innerHTML = ''; // Ocultar lista
+            }
+
+            cargarDatosUsuarioFactura();
+        }
+
+        // Nueva función para filtrar al escribir
+        function filtrarUsuariosFactura() {
+            const texto = document.getElementById('input-f-usuario-search').value.toLowerCase();
+            const divResultados = document.getElementById('f-usuario-resultados');
+            divResultados.innerHTML = '';
+
+            if (texto.length < 2) {
+                divResultados.innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
+                document.getElementById('f-usuario-id').value = ''; // Limpiar selección si borra
+                cargarDatosUsuarioFactura(); // Cargar datos vacíos
+                return;
+            }
+
+            const encontrados = usuarios.filter(u =>
+                u.nombre.toLowerCase().includes(texto) ||
+                u.contador.includes(texto)
+            );
+
+            if (encontrados.length === 0) {
+                divResultados.innerHTML = '<p style="padding:10px; text-align:center; color:var(--danger); margin:0;">No se encontró el cliente.</p>';
+                document.getElementById('f-usuario-id').value = '';
+                cargarDatosUsuarioFactura();
+                return;
+            }
+
+            encontrados.forEach(u => {
+                divResultados.innerHTML += `
+                    <div style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer;"
+                         onclick="seleccionarUsuarioFactura(${u.id}, '${u.nombre}', '${u.contador}')">
+                        <strong>${u.nombre}</strong> <small>(${u.direccion})</small>
+                    </div>`;
+            });
+        }
+
+        // Nueva función para seleccionar un usuario de la lista y cargar sus datos
+        function seleccionarUsuarioFactura(id, nombre, contador) {
+            document.getElementById('f-usuario-id').value = id; // Guarda el ID en el campo oculto
+            document.getElementById('input-f-usuario-search').value = `${nombre} (${contador})`; // Muestra el nombre completo
+            document.getElementById('f-usuario-resultados').innerHTML = ''; // Limpia resultados
+
+            cargarDatosUsuarioFactura();
+        }
+
+        // ============ NAVEGACIÓN POR CASERÍO (solo nombres) - FACTURACIÓN ============
+        let caserioFacturaSeleccionado = null;
+
+        function abrirCaserioFactura(nombre) {
+            registrarPasoAtras(() => volverCaseriosFactura());
+            caserioFacturaSeleccionado = nombre;
+            document.getElementById('factura-vista-caserios').style.display = 'none';
+            document.getElementById('factura-vista-nombres').style.display = 'block';
+            document.getElementById('factura-titulo-caserio').innerText = nombre;
+            renderizarNombresFactura();
+        }
+
+        // ================================================================================
+        // CORRECCIÓN RÁPIDA DEL ÚLTIMO RECIBO (sin salir de Facturación)
+        // ================================================================================
+        function mostrarAvisoUltimoRecibo(recibo) {
+            ultimoReciboGeneradoId = recibo.id;
+            const aviso = document.getElementById('aviso-ultimo-recibo');
+            if (!aviso) return;
+            // Total real cobrado: consumo + mora/saldo + cargos extra (igual que en el recibo impreso)
+            const total = (parseFloat(recibo.total) || 0) + (parseFloat(recibo.mora) || 0) + (parseFloat(recibo.extra) || 0);
+            document.getElementById('aviso-ultimo-recibo-detalle').innerText =
+                `${recibo.nombre} · Recibo N° ${recibo.numero} · Total $${total.toFixed(2)}`;
+            aviso.style.display = 'block';
+        }
+
+        function ocultarAvisoUltimoRecibo() {
+            ultimoReciboGeneradoId = null;
+            const aviso = document.getElementById('aviso-ultimo-recibo');
+            if (aviso) aviso.style.display = 'none';
+        }
+
+        // Carga en el formulario los datos exactos del último recibo generado para corregirlos
+        function corregirUltimoRecibo() {
+            if (!ultimoReciboGeneradoId) return;
+            const r = recibos.find(x => x.id === ultimoReciboGeneradoId);
+            if (!r) {
+                alert("No se encontró el recibo. Es posible que ya haya sido eliminado.");
+                ocultarAvisoUltimoRecibo();
+                return;
+            }
+            if (!confirm(`¿Corregir el Recibo N° ${r.numero} de ${r.nombre}? Se cargarán sus datos para editarlos.`)) return;
+
+            // Selecciona al cliente (esto también resetea el formulario a sus valores por defecto)
+            document.getElementById('f-usuario-id').value = r.usuarioId;
+            document.getElementById('input-f-usuario-search').value = `${r.nombre} (${r.contador})`;
+            document.getElementById('f-usuario-resultados').innerHTML = '';
+            cargarDatosUsuarioFactura();
+
+            // Sobreescribe con los datos EXACTOS del recibo a corregir
+            reciboEditandoId = r.id;
+            document.getElementById('f-lectura-ant').value = r.lecturaAnt;
+            document.getElementById('f-lectura-act').value = r.lecturaActual;
+            document.getElementById('f-precio').value = r.precioUnidad;
+            document.getElementById('f-mora').value = r.mora;
+            document.getElementById('f-extra').value = r.extra;
+            if (typeof calcularTotales === 'function') calcularTotales();
+            const btnGuardar = document.getElementById('btn-guardar-recibo');
+            if (btnGuardar) btnGuardar.innerText = '💾 Actualizar Recibo';
+
+            ocultarAvisoUltimoRecibo();
+        }
+
+        // Elimina directamente el último recibo generado (por si fue un error total y no una corrección)
+        function eliminarUltimoReciboDesdeFactura() {
+            if (!ultimoReciboGeneradoId) return;
+            const idAEliminar = ultimoReciboGeneradoId;
+            eliminarRecibo(idAEliminar); // ya pide confirmación internamente
+            if (!recibos.find(r => r.id === idAEliminar)) {
+                ocultarAvisoUltimoRecibo();
+            }
+        }
+
+        function volverCaseriosFactura() {
+            caserioFacturaSeleccionado = null;
+            document.getElementById('factura-vista-caserios').style.display = 'grid';
+            document.getElementById('factura-vista-nombres').style.display = 'none';
+        }
+
+        function renderizarNombresFactura() {
+            const div = document.getElementById('factura-lista-nombres');
+            const lista = usuarios
+                .filter(u => u.direccion === caserioFacturaSeleccionado)
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            if (lista.length === 0) {
+                div.innerHTML = '<p style="padding:15px; text-align:center; color:#999; margin:0;">No hay usuarios registrados en este caserío.</p>';
+                return;
+            }
+
+            div.innerHTML = lista.map(u => `
+                <div style="padding:14px 16px; border-bottom:1px solid #eee; cursor:pointer; font-weight:600;"
+                     onclick="seleccionarUsuarioFacturaPorId(${u.id})">
+                    ${u.nombre}
+                </div>`).join('');
+        }
+
+        // Selecciona un usuario (solo por ID, evita problemas con comillas en nombres) y carga la factura
+        function seleccionarUsuarioFacturaPorId(id) {
+            const u = usuarios.find(x => x.id == id);
+            if (!u) return;
+            document.getElementById('f-usuario-id').value = u.id;
+            document.getElementById('input-f-usuario-search').value = `${u.nombre} (${u.contador})`;
+            document.getElementById('f-usuario-resultados').innerHTML = '';
+            cargarDatosUsuarioFactura();
+        }
+        // ================================================================================
+
+        // ⚠️ FUNCIÓN CLAVE REEMPLAZADA: CON FALLBACK DE LECTURA (Importación Lite)
+        function cargarDatosUsuarioFactura() {
+            // Lee el ID del campo oculto
+            const id = document.getElementById('f-usuario-id').value;
+            const u = usuarios.find(x => x.id == id);
+
+            // Resetear campos visuales
+            reciboEditandoId = null;
+            document.getElementById('btn-guardar-recibo').innerText = '💾 Generar Recibo';
+            document.getElementById('f-lectura-ant').value = 0;
+            document.getElementById('f-lectura-act').value = '';
+            document.getElementById('f-consumo').value = 0;
+            document.getElementById('f-total-pagar').innerText = '$0.00';
+            document.getElementById('f-mora').value = 0.00;
+            document.getElementById('f-extra').value = 0.00;
+            document.getElementById('extra-detalle-nota').style.display = 'none';
+            document.getElementById('alerta-deuda').style.display = 'none';
+
+            if(u) {
+                document.getElementById('f-display-contador').innerText = u.contador;
+                document.getElementById('f-display-dir').innerText = u.direccion || '';
+
+                // Cliente cargado: cerramos el buscador por caserío y mostramos el formulario del recibo
+                const browserFacturaVisible = document.getElementById('factura-caserio-browser').style.display !== 'none';
+                if (browserFacturaVisible) registrarPasoAtras(() => mostrarBuscadorCaserioFactura());
+                document.getElementById('factura-caserio-browser').style.display = 'none';
+                document.getElementById('btn-cambiar-cliente').style.display = 'block';
+                document.getElementById('factura-form-recibo').style.display = 'block';
+
+                const historial = recibos.filter(r => r.usuarioId == id);
+
+                // 🔑 LÓGICA CORREGIDA: Primero busca en Recibos, luego en el objeto del usuario (u.ultimaLectura).
+                if(historial.length > 0) {
+                    // Si hay historial, usa la última lectura del recibo (Lectura Actual)
+                    const ultimoRecibo = historial.sort((a, b) => b.id - a.id)[0];
+                    document.getElementById('f-lectura-ant').value = ultimoRecibo.lecturaActual;
+                } else if (u.ultimaLectura) {
+                    // Si NO hay historial de recibos (Importación Lite), usa la lectura del objeto usuario.
+                    document.getElementById('f-lectura-ant').value = u.ultimaLectura;
+                }
+
+
+                const pendientes = recibos.filter(r => r.usuarioId == id && r.estado === 'pendiente');
+                if(pendientes.length > 0) {
+                    const totalDeuda = pendientes.reduce((sum, r) => sum + totalRecibo(r), 0);
+                    document.getElementById('f-mora').value = totalDeuda.toFixed(2);
+                    document.getElementById('alerta-deuda').style.display = 'block';
+                    document.getElementById('alerta-deuda').innerHTML = `⚠️ <strong>Saldo Pendiente:</strong> Debe <strong>$${totalDeuda.toFixed(2)}</strong> de meses anteriores.`;
+                }
+
+                // Cargos pendientes de Trabajo de Calle: se precargan automáticamente en este recibo
+                // (se refleja lo agregado desde el módulo "Trabajo de Calle", y se puede editar aquí mismo)
+                renderizarCargosEnFactura();
+            } else {
+                document.getElementById('f-display-contador').innerText = '---';
+                document.getElementById('f-display-dir').innerText = '---';
+
+                // Sin cliente seleccionado: mostramos de nuevo el buscador por caserío y ocultamos el formulario del recibo
+                document.getElementById('factura-caserio-browser').style.display = 'block';
+                document.getElementById('btn-cambiar-cliente').style.display = 'none';
+                document.getElementById('factura-form-recibo').style.display = 'none';
+            }
+        }
+
+        // Vuelve a mostrar el selector de caserío para elegir otro cliente
+        function mostrarBuscadorCaserioFactura() {
+            volverCaseriosFactura();
+            document.getElementById('factura-caserio-browser').style.display = 'block';
+            document.getElementById('btn-cambiar-cliente').style.display = 'none';
+            document.getElementById('factura-form-recibo').style.display = 'none';
+        }
+
+        // ================= MÓDULO "COBRAR" (solo cobrar y generar recibo) =================
+        let caserioCobrarSeleccionado = null;
+
+        // --- Buscador de texto ---
+        function filtrarUsuariosCobrar() {
+            const texto = document.getElementById('input-c-usuario-search').value.toLowerCase();
+            const divResultados = document.getElementById('c-usuario-resultados');
+            divResultados.innerHTML = '';
+
+            if (texto.length < 2) {
+                divResultados.innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
+                return;
+            }
+
+            const encontrados = usuarios.filter(u =>
+                u.nombre.toLowerCase().includes(texto) ||
+                u.contador.includes(texto)
+            );
+
+            if (encontrados.length === 0) {
+                divResultados.innerHTML = '<p style="padding:10px; text-align:center; color:var(--danger); margin:0;">No se encontró el cliente.</p>';
+                return;
+            }
+
+            encontrados.forEach(u => {
+                divResultados.innerHTML += `
+                    <div style="padding: 10px; border-bottom: 1px solid #eee; cursor: pointer;"
+                         onclick="seleccionarUsuarioCobrarPorId(${u.id})">
+                        <strong>${u.nombre}</strong> <small>(${u.direccion})</small>
+                    </div>`;
+            });
+        }
+
+        // --- Navegación por caserío (solo nombres) ---
+        function abrirCaserioCobrar(nombre) {
+            registrarPasoAtras(() => volverCaseriosCobrar());
+            caserioCobrarSeleccionado = nombre;
+            document.getElementById('cobrar-vista-caserios').style.display = 'none';
+            document.getElementById('cobrar-vista-nombres').style.display = 'block';
+            document.getElementById('cobrar-titulo-caserio').innerText = nombre;
+            renderizarNombresCobrar();
+        }
+
+        function volverCaseriosCobrar() {
+            caserioCobrarSeleccionado = null;
+            document.getElementById('cobrar-vista-caserios').style.display = 'grid';
+            document.getElementById('cobrar-vista-nombres').style.display = 'none';
+        }
+
+        function renderizarNombresCobrar() {
+            const div = document.getElementById('cobrar-lista-nombres');
+            const lista = usuarios
+                .filter(u => u.direccion === caserioCobrarSeleccionado)
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            if (lista.length === 0) {
+                div.innerHTML = '<p style="padding:15px; text-align:center; color:#999; margin:0;">No hay usuarios registrados en este caserío.</p>';
+                return;
+            }
+
+            div.innerHTML = lista.map(u => `
+                <div style="padding:14px 16px; border-bottom:1px solid #eee; cursor:pointer; font-weight:600;"
+                     onclick="seleccionarUsuarioCobrarPorId(${u.id})">
+                    ${u.nombre}
+                </div>`).join('');
+        }
+
+        // --- Selección de cliente: cierra buscador y muestra solo la información ---
+        function seleccionarUsuarioCobrarPorId(id) {
+            document.getElementById('c-usuario-id').value = id;
+            document.getElementById('c-usuario-resultados').innerHTML = '';
+            document.getElementById('input-c-usuario-search').value = '';
+            cargarDatosUsuarioCobrar();
+        }
+
+        // ================= RECAUDACIÓN (Hoy / Mes / Total + filtros personalizados) =================
+        // Suma lo efectivamente cobrado (recibos con estado 'pagado'), usando la
+        // fecha en que se marcaron como pagados (fechaPago), no la fecha de emisión.
+        let recTabActiva = 'pagados';
+
+        function cambiarModoPeriodoRecaudacion() {
+            const modo = document.getElementById('rec-modo-periodo').value;
+            document.getElementById('rec-input-dia').style.display = (modo === 'dia') ? 'block' : 'none';
+            document.getElementById('rec-input-mes').style.display = (modo === 'mesx') ? 'block' : 'none';
+            document.getElementById('rec-input-anio').style.display = (modo === 'aniox') ? 'block' : 'none';
+            actualizarRecaudacion();
+        }
+
+        // ¿La fecha (dd/mm/aaaa) cae dentro del periodo elegido por el usuario?
+        function fechaEnPeriodoSeleccionado(fechaStr) {
+            if (!fechaStr) return false;
+            const partes = fechaStr.split('/');
+            if (partes.length !== 3) return false;
+            const dia = parseInt(partes[0], 10), mes = parseInt(partes[1], 10), anio = parseInt(partes[2], 10);
+            if (!dia || !mes || !anio) return false;
+
+            const modo = document.getElementById('rec-modo-periodo').value;
+            const hoy = new Date();
+
+            if (modo === 'hoy') return dia === hoy.getDate() && mes === (hoy.getMonth()+1) && anio === hoy.getFullYear();
+            if (modo === 'mes') return mes === (hoy.getMonth()+1) && anio === hoy.getFullYear();
+            if (modo === 'anio') return anio === hoy.getFullYear();
+            if (modo === 'todo') return true;
+
+            if (modo === 'dia') {
+                const val = document.getElementById('rec-input-dia').value; // yyyy-mm-dd
+                if (!val) return false;
+                const [ay, am, ad] = val.split('-').map(n => parseInt(n, 10));
+                return dia === ad && mes === am && anio === ay;
+            }
+            if (modo === 'mesx') {
+                const val = document.getElementById('rec-input-mes').value; // yyyy-mm
+                if (!val) return false;
+                const [ay, am] = val.split('-').map(n => parseInt(n, 10));
+                return mes === am && anio === ay;
+            }
+            if (modo === 'aniox') {
+                const val = parseInt(document.getElementById('rec-input-anio').value, 10);
+                if (!val) return false;
+                return anio === val;
+            }
+            return false;
+        }
+
+        function etiquetaPeriodoSeleccionado() {
+            const modo = document.getElementById('rec-modo-periodo').value;
+            const map = { hoy:'Recaudado hoy', mes:'Recaudado este mes', anio:'Recaudado este año', todo:'Recaudado en todo el tiempo' };
+            if (map[modo]) return map[modo];
+            if (modo === 'dia') {
+                const val = document.getElementById('rec-input-dia').value;
+                return val ? 'Recaudado el ' + val.split('-').reverse().join('/') : 'Elige un día';
+            }
+            if (modo === 'mesx') {
+                const val = document.getElementById('rec-input-mes').value;
+                return val ? 'Recaudado en ' + val : 'Elige un mes';
+            }
+            if (modo === 'aniox') {
+                const val = document.getElementById('rec-input-anio').value;
+                return val ? 'Recaudado en el año ' + val : 'Elige un año';
+            }
+            return 'Recaudado';
+        }
+
+        function usuarioCaserioCoincide(direccion) {
+            const filtro = document.getElementById('rec-filtro-caserio').value;
+            if (filtro === 'todos') return true;
+            return direccion === filtro;
+        }
+
+        function mostrarRecaudacion() {
+            document.getElementById('rec-modo-periodo').value = 'hoy';
+            document.getElementById('rec-filtro-caserio').value = 'todos';
+            document.getElementById('rec-input-dia').style.display = 'none';
+            document.getElementById('rec-input-mes').style.display = 'none';
+            document.getElementById('rec-input-anio').style.display = 'none';
+            recTabActiva = 'pagados';
+            document.getElementById('tab-btn-pagados').style.opacity = '1';
+            document.getElementById('tab-btn-deben').style.opacity = '0.55';
+            actualizarRecaudacion();
+            document.getElementById('modal-recaudacion').style.display = 'flex';
+            registrarPasoAtras(() => cerrarModalRecaudacion());
+        }
+
+        function cerrarModalRecaudacion() {
+            document.getElementById('modal-recaudacion').style.display = 'none';
+        }
+
+        function mostrarTabRecaudacion(tab) {
+            recTabActiva = tab;
+            document.getElementById('tab-btn-pagados').style.opacity = (tab === 'pagados') ? '1' : '0.55';
+            document.getElementById('tab-btn-deben').style.opacity = (tab === 'deben') ? '1' : '0.55';
+            actualizarRecaudacion();
+        }
+
+        function actualizarRecaudacion() {
+            const pagados = recibos.filter(r => r.estado === 'pagado');
+            const hoy = new Date();
+
+            // --- KPIs fijos y globales (Hoy / Mes / Total), sin filtro de caserío ---
+            let hoyMonto = 0, hoyCant = 0, mesMonto = 0, mesCant = 0, totalMonto = 0, totalCant = 0;
+            pagados.forEach(r => {
+                const monto = totalRecibo(r);
+                totalMonto += monto; totalCant++;
+                // Respaldo: si un recibo antiguo no tiene fechaPago (se cobró antes de existir ese campo),
+                // usamos su fecha de emisión como aproximación — igual que en el ticket impreso.
+                const fechaUsada = r.fechaPago || r.fecha;
+                if (!fechaUsada) return;
+                const partes = fechaUsada.split('/');
+                if (partes.length !== 3) return;
+                const dia = parseInt(partes[0], 10), mes = parseInt(partes[1], 10), anio = parseInt(partes[2], 10);
+                if (anio === hoy.getFullYear() && mes === (hoy.getMonth()+1)) {
+                    mesMonto += monto; mesCant++;
+                    if (dia === hoy.getDate()) { hoyMonto += monto; hoyCant++; }
+                }
+            });
+            document.getElementById('rec-hoy-monto').innerText = '$' + hoyMonto.toFixed(2);
+            document.getElementById('rec-hoy-cantidad').innerText = hoyCant + ' rec.';
+            document.getElementById('rec-mes-monto').innerText = '$' + mesMonto.toFixed(2);
+            document.getElementById('rec-mes-cantidad').innerText = mesCant + ' rec.';
+            document.getElementById('rec-total-monto').innerText = '$' + totalMonto.toFixed(2);
+            document.getElementById('rec-total-cantidad').innerText = totalCant + ' rec.';
+
+            // --- Resumen personalizado (periodo elegido + caserío elegido) ---
+            let periodoMonto = 0, periodoCant = 0;
+            const listaPagadosFiltrada = [];
+            pagados.forEach(r => {
+                if (!usuarioCaserioCoincide(r.direccion)) return;
+                if (!fechaEnPeriodoSeleccionado(r.fechaPago || r.fecha)) return;
+                periodoMonto += totalRecibo(r);
+                periodoCant++;
+                listaPagadosFiltrada.push(r);
+            });
+            document.getElementById('rec-periodo-label').innerText = etiquetaPeriodoSeleccionado();
+            document.getElementById('rec-periodo-monto').innerText = '$' + periodoMonto.toFixed(2);
+            document.getElementById('rec-periodo-cantidad').innerText = periodoCant + (periodoCant === 1 ? ' recibo' : ' recibos');
+
+            // --- Deudores: recibos pendientes, filtrados solo por caserío (la deuda no tiene "fecha de pago") ---
+            const pendientes = recibos.filter(r => r.estado === 'pendiente' && usuarioCaserioCoincide(r.direccion));
+
+            document.getElementById('tab-btn-pagados').innerText = `✅ Pagados (${listaPagadosFiltrada.length})`;
+            document.getElementById('tab-btn-deben').innerText = `⏳ Deben (${pendientes.length})`;
+
+            renderizarListaRecaudacion(recTabActiva === 'pagados' ? listaPagadosFiltrada : pendientes, recTabActiva);
+        }
+
+        function renderizarListaRecaudacion(lista, tipo) {
+            const cont = document.getElementById('rec-lista-contenedor');
+            if (!lista.length) {
+                cont.innerHTML = `<p style="padding:16px; text-align:center; color:#999; margin:0;">${tipo === 'pagados' ? 'No hay pagos en este periodo/caserío.' : '🎉 No hay deudores en este caserío.'}</p>`;
+                return;
+            }
+            const ordenada = [...lista].sort((a, b) => {
+                if (tipo === 'pagados') return (b.id || 0) - (a.id || 0);
+                return totalRecibo(b) - totalRecibo(a);
+            });
+            cont.innerHTML = ordenada.map(r => {
+                const monto = totalRecibo(r);
+                const fechaPagoMostrada = r.fechaPago || (r.fecha ? r.fecha + ' (aprox.)' : '');
+                const linea2 = tipo === 'pagados' ? `Pagado: ${fechaPagoMostrada}` : `Pendiente desde: ${r.fecha || ''}`;
+                const colorMonto = tipo === 'pagados' ? '#2e7d32' : '#c62828';
+                return `<div style="padding:10px 12px; border-bottom:1px solid #f0f0f0; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700; font-size:0.88rem;">${r.nombre || ''}</div>
+                        <div style="font-size:0.72rem; color:#888;">${r.direccion || ''} · ${linea2}</div>
+                    </div>
+                    <div style="font-weight:800; color:${colorMonto};">$${monto.toFixed(2)}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ================= MÓDULO "TRABAJO DE CALLE" =================
+        let caserioCalleSeleccionado = null;
+
+        function abrirCaserioCalle(nombre) {
+            registrarPasoAtras(() => volverCaseriosCalle());
+            caserioCalleSeleccionado = nombre;
+            document.getElementById('calle-vista-caserios').style.display = 'none';
+            document.getElementById('calle-vista-nombres').style.display = 'block';
+            document.getElementById('calle-titulo-caserio').innerText = nombre;
+            renderizarNombresCalle();
+        }
+
+        function volverCaseriosCalle() {
+            caserioCalleSeleccionado = null;
+            document.getElementById('calle-vista-caserios').style.display = 'grid';
+            document.getElementById('calle-vista-nombres').style.display = 'none';
+        }
+
+        function renderizarNombresCalle() {
+            const filtro = (document.getElementById('input-search-calle').value || '').toLowerCase();
+            const div = document.getElementById('calle-lista-nombres');
+            const lista = usuarios
+                .filter(u => u.direccion === caserioCalleSeleccionado)
+                .filter(u => !filtro || u.nombre.toLowerCase().includes(filtro))
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            if (lista.length === 0) {
+                div.innerHTML = '<p style="padding:15px; text-align:center; color:#999; margin:0;">No hay usuarios registrados en este caserío.</p>';
+                return;
+            }
+
+            div.innerHTML = lista.map(u => {
+                const cargos = Array.isArray(u.cargosExtra) ? u.cargosExtra : [];
+                const totalPend = cargos.reduce((s, c) => s + (Number(c.monto) || 0), 0);
+                const tags = cargos.map(c => `
+                    <span style="display:inline-flex; align-items:center; gap:4px; background:#fff3e0; color:#e65100; border-radius:8px; padding:4px 8px; font-size:0.75rem; margin:4px 6px 0 0;">
+                        ${c.concepto}: $${Number(c.monto).toFixed(2)}
+                        <a href="javascript:void(0)" onclick="event.stopPropagation(); quitarCargoCalle(${u.id}, ${c.id})" style="color:#e65100; font-weight:bold; text-decoration:none;">✕</a>
+                    </span>`).join('');
+
+                return `
+                <div style="padding:14px 16px; border-bottom:1px solid #eee;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                        <span style="font-weight:600;">${u.nombre}${totalPend > 0 ? ' <small style="color:#e65100; font-weight:700;">($' + totalPend.toFixed(2) + ' pend.)</small>' : ''}</span>
+                        <button class="btn" style="padding:6px 12px; font-size:0.8rem; background:#e65100; color:white; margin:0; white-space:nowrap;" onclick="agregarCargoCalle(${u.id})">➕ Cargo</button>
+                    </div>
+                    ${tags ? '<div style="margin-top:6px;">' + tags + '</div>' : ''}
+                </div>`;
+            }).join('');
+        }
+
+        // Agrega un cargo pendiente al usuario (se cobrará junto con su próximo recibo de agua)
+        function agregarCargoCalle(usuarioId) {
+            const montoStr = prompt("Monto a cobrar (US$):", "5.00");
+            if (montoStr === null) return;
+            const monto = parseFloat(montoStr);
+            if (isNaN(monto) || monto <= 0) { alert("❌ Monto inválido."); return; }
+            const concepto = prompt("Concepto:", "Inasistencia Trabajo de Calle");
+            if (concepto === null) return;
+
+            const u = usuarios.find(x => x.id === usuarioId);
+            if (!u) return;
+            if (!Array.isArray(u.cargosExtra)) u.cargosExtra = [];
+            u.cargosExtra.push({ id: Date.now(), concepto: concepto.trim() || "Inasistencia Trabajo de Calle", monto: monto, fecha: new Date().toLocaleDateString('es-ES') });
+
+            localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
+            if (typeof syncUsuario === 'function') syncUsuario(u);
+            if (document.getElementById('calle-vista-nombres').style.display !== 'none') renderizarNombresCalle();
+            refrescarCargosEnFacturaSiAplica(usuarioId);
+        }
+
+        // Quita un cargo pendiente (por ejemplo, si se agregó por error)
+        function quitarCargoCalle(usuarioId, cargoId) {
+            if (!confirm("¿Eliminar este cargo pendiente?")) return;
+            const u = usuarios.find(x => x.id === usuarioId);
+            if (!u || !Array.isArray(u.cargosExtra)) return;
+            u.cargosExtra = u.cargosExtra.filter(c => c.id !== cargoId);
+
+            localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
+            if (typeof syncUsuario === 'function') syncUsuario(u);
+            if (document.getElementById('calle-vista-nombres').style.display !== 'none') renderizarNombresCalle();
+            refrescarCargosEnFacturaSiAplica(usuarioId);
+        }
+
+        // Llamada desde la pantalla de Facturación: agrega un cargo de Trabajo de Calle
+        // usando el mismo mecanismo que el módulo "Trabajo de Calle" (mismo dato compartido).
+        function agregarCargoCalleDesdeFactura() {
+            const uid = document.getElementById('f-usuario-id').value;
+            if (!uid) return alert("Primero selecciona un cliente.");
+            agregarCargoCalle(Number(uid));
+        }
+
+        // Si el cliente que se acaba de modificar en "Trabajo de Calle" es el mismo que
+        // está cargado ahora mismo en la pantalla de Facturación, refresca sus cargos y el total,
+        // para que el cambio se refleje al instante en ambos lados.
+        function refrescarCargosEnFacturaSiAplica(usuarioId) {
+            const fId = document.getElementById('f-usuario-id') ? document.getElementById('f-usuario-id').value : null;
+            if (fId && Number(fId) === Number(usuarioId)) {
+                renderizarCargosEnFactura();
+            }
+        }
+
+        // Pinta en la pantalla de Facturación la lista desglosada de cargos de Trabajo de Calle
+        // pendientes para el cliente cargado, y sincroniza el campo f-extra con su suma.
+        function renderizarCargosEnFactura() {
+            const id = document.getElementById('f-usuario-id').value;
+            const u = usuarios.find(x => x.id == id);
+            const cargosPend = (u && Array.isArray(u.cargosExtra)) ? u.cargosExtra : [];
+            const totalExtra = cargosPend.reduce((s, c) => s + (Number(c.monto) || 0), 0);
+
+            document.getElementById('f-extra').value = totalExtra.toFixed(2);
+
+            const notaDiv = document.getElementById('extra-detalle-nota');
+            if (cargosPend.length > 0) {
+                notaDiv.innerHTML = cargosPend.map(c => `
+                    <span style="display:inline-flex; align-items:center; gap:4px; background:#fff3e0; color:#e65100; border-radius:8px; padding:4px 8px; font-size:0.75rem; margin:4px 6px 4px 0;">
+                        ${c.concepto}: $${Number(c.monto).toFixed(2)}
+                        <a href="javascript:void(0)" onclick="quitarCargoCalle(${u.id}, ${c.id})" style="color:#e65100; font-weight:bold; text-decoration:none;">✕</a>
+                    </span>`).join('');
+                notaDiv.style.display = 'block';
+            } else {
+                notaDiv.innerHTML = '';
+                notaDiv.style.display = 'none';
+            }
+
+            calcularTotales();
+        }
+        // ================= FIN MÓDULO "TRABAJO DE CALLE" =================
+
+        // Vuelve a mostrar el buscador/caserío para elegir otro cliente
+        function mostrarBuscadorCaserioCobrar() {
+            document.getElementById('c-usuario-id').value = '';
+            volverCaseriosCobrar();
+            document.getElementById('cobrar-caserio-browser').style.display = 'block';
+            document.getElementById('btn-cambiar-cliente-cobrar').style.display = 'none';
+            document.getElementById('cobrar-info-cliente').style.display = 'none';
+        }
+
+        // Carga los datos del cliente y sus recibos pendientes por cobrar
+        function cargarDatosUsuarioCobrar() {
+            const id = document.getElementById('c-usuario-id').value;
+            const u = usuarios.find(x => x.id == id);
+
+            if (!u) {
+                mostrarBuscadorCaserioCobrar();
+                return;
+            }
+
+            // Cliente cargado: cerramos el buscador y dejamos solo la información
+            const browserCobrarVisible = document.getElementById('cobrar-caserio-browser').style.display !== 'none';
+            if (browserCobrarVisible) registrarPasoAtras(() => mostrarBuscadorCaserioCobrar());
+            document.getElementById('cobrar-caserio-browser').style.display = 'none';
+            document.getElementById('btn-cambiar-cliente-cobrar').style.display = 'block';
+            document.getElementById('cobrar-info-cliente').style.display = 'block';
+
+            document.getElementById('c-display-contador').innerText = u.contador;
+            document.getElementById('c-display-dir').innerText = u.direccion || '';
+
+            const pendientes = recibos
+                .filter(r => r.usuarioId == id && r.estado === 'pendiente')
+                .sort((a, b) => a.id - b.id);
+
+            const divPend = document.getElementById('cobrar-lista-pendientes');
+
+            if (pendientes.length === 0) {
+                divPend.innerHTML = '<p style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px 0;">✅ Este cliente no tiene recibos pendientes.</p>';
+                return;
+            }
+
+            const detalleItems = pendientes.map(r => {
+                const consumoR = parseFloat(r.total) || 0;
+                const extraR = parseFloat(r.extra) || 0;
+                const totalR = consumoR + extraR;
+                return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee;">
+                    <div>
+                        <strong style="text-transform:capitalize; font-size:0.9rem;">${r.mesFacturado}</strong> <small style="color:#666;">N° ${r.numero}</small>
+                        <div style="font-size:0.75rem; color:#888; margin-top:2px;">
+                            Consumo: $${consumoR.toFixed(2)}
+                            ${extraR > 0 ? ' &nbsp;🚧 Trabajo de Calle: $' + extraR.toFixed(2) + (r.extraDetalle ? ' (' + r.extraDetalle + ')' : '') : ''}
+                        </div>
+                    </div>
+                    <div style="font-weight:700; color:var(--text-main);">$${totalR.toFixed(2)}</div>
+                </div>`;
+            }).join('');
+
+            if (pendientes.length === 1) {
+                // Un solo recibo pendiente: un solo monto y un solo botón, sin necesidad de consolidar nada.
+                const r = pendientes[0];
+                const totalR = (parseFloat(r.total) || 0) + (parseFloat(r.extra) || 0);
+                divPend.innerHTML = `
+                <div class="card" style="margin-bottom:12px;">
+                    ${detalleItems}
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+                        <span style="font-size:1.4rem; font-weight:800; color:var(--danger);">$${totalR.toFixed(2)}</span>
+                        <button class="btn btn-primary" style="margin:0; padding:10px 18px; font-size:0.9rem;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar</button>
+                    </div>
+                </div>`;
+                return;
+            }
+
+            // Varios recibos pendientes: se muestra UN solo total y UN solo botón para pagarlos todos juntos
+            // (evita que se vean como cobros separados y confundan al momento de cobrar).
+            const totalGeneral = pendientes.reduce((s, r) => s + (parseFloat(r.total) || 0) + (parseFloat(r.extra) || 0), 0);
+            divPend.innerHTML = `
+            <div class="card" style="margin-bottom:12px; border:2px solid var(--danger);">
+                <div style="font-size:0.85rem; color:#888; margin-bottom:4px;">🧾 ${pendientes.length} recibos pendientes de este cliente:</div>
+                ${detalleItems}
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+                    <div>
+                        <div style="font-size:0.75rem; color:#888;">TOTAL A PAGAR</div>
+                        <span style="font-size:1.5rem; font-weight:800; color:var(--danger);">$${totalGeneral.toFixed(2)}</span>
+                    </div>
+                    <button class="btn btn-primary" style="margin:0; padding:12px 20px; font-size:0.95rem;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar Todo</button>
+                </div>
+            </div>`;
+        }
+
+        // Cobra TODOS los recibos pendientes de un cliente en un solo pago (un solo monto, un solo movimiento en Caja).
+        // Internamente reutiliza pagarRecibo() sobre el recibo pendiente más reciente, que ya arrastra
+        // y liquida automáticamente cualquier recibo anterior sin pagar del mismo cliente.
+        function cobrarTodosPendientes(usuarioId) {
+            const pendientes = recibos.filter(r => r.usuarioId == usuarioId && r.estado === 'pendiente');
+            if (pendientes.length === 0) return;
+            const masReciente = pendientes.reduce((max, r) => (r.id > max.id ? r : max), pendientes[0]);
+            pagarRecibo(masReciente.id);
+            cargarDatosUsuarioCobrar();
+        }
+        // ================= FIN MÓDULO "COBRAR" =================
+
+            function calcularTotales() {
+            const ant = parseFloat(document.getElementById('f-lectura-ant').value)||0;
+            const act = parseFloat(document.getElementById('f-lectura-act').value)||0;
+            const prec = parseFloat(document.getElementById('f-precio').value)||0;
+            const mora = parseFloat(document.getElementById('f-mora').value)||0;
+            const extra = parseFloat(document.getElementById('f-extra').value)||0;
+
+            let cons = (act - ant) < 0 ? 0 : (act - ant);
+            document.getElementById('f-consumo').value = cons;
+
+            const totalMes = cons * prec;
+
+            // Mostramos el total combinado para que sepas cuánto cobrar en efectivo
+            document.getElementById('f-total-pagar').innerText = '$' + (totalMes + mora + extra).toFixed(2);
+        }
+
+
+        // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+        async function guardarRecibo() {
+            const uid = document.getElementById('f-usuario-id').value;
+            const u = usuarios.find(x => x.id == uid);
+
+            if(!uid) return alert("Faltan datos: Por favor, seleccione un cliente de la lista de resultados.");
+            if(!document.getElementById('f-lectura-act').value) return alert("Faltan datos: Ingrese la Lectura Actual.");
+
+            const hoy = new Date();
+
+            const consumo = parseFloat(document.getElementById('f-consumo').value) || 0;
+            const precio = parseFloat(document.getElementById('f-precio').value) || 0;
+            const moraVisual = parseFloat(document.getElementById('f-mora').value) || 0;
+            const extraVisual = parseFloat(document.getElementById('f-extra').value) || 0;
+            const cargosExtraDelRecibo = (u && Array.isArray(u.cargosExtra)) ? u.cargosExtra : [];
+            const extraDetalle = cargosExtraDelRecibo.map(c => c.concepto + ' ($' + Number(c.monto).toFixed(2) + ')').join(', ');
+            const consumoMes = (consumo * precio).toFixed(2);
+
+            // Detalle de a qué meses corresponde el Saldo Pendiente (para mostrarlo en el recibo impreso)
+            const pendientesDelCliente = recibos.filter(rec => rec.usuarioId == uid && rec.estado === 'pendiente' && rec.id !== reciboEditandoId);
+            const moraDetalle = pendientesDelCliente.map(p => p.mesFacturado + ' ($' + totalRecibo(p).toFixed(2) + ')').join(', ');
+
+            // Periodo Facturado: desde la fecha de la última lectura (recibo anterior) hasta hoy.
+            const historialCliente = recibos.filter(rec => rec.usuarioId == uid && rec.id !== reciboEditandoId).sort((a, b) => b.id - a.id);
+            const periodoDesde = historialCliente.length > 0 ? historialCliente[0].fecha : (u.fechaIngreso || 'Primera Lectura');
+
+            let receiptId = reciboEditandoId || Date.now();
+            let receiptNum = null;
+
+            if (!reciboEditandoId) {
+                // Lógica de CREACIÓN: número atómico desde Firestore (evita duplicados con varios cajeros a la vez).
+                if (typeof obtenerSiguienteNumeroRecibo === 'function') {
+                    try { receiptNum = await obtenerSiguienteNumeroRecibo(); }
+                    catch(e) { console.error(e); lastReciboNum = lastReciboNum + 1; localStorage.setItem('agua_last_recibo_num', lastReciboNum); receiptNum = lastReciboNum; }
+                } else {
+                    lastReciboNum = lastReciboNum + 1;
+                    localStorage.setItem('agua_last_recibo_num', lastReciboNum);
+                    receiptNum = lastReciboNum;
+                }
+            } else {
+                // Lógica de EDICIÓN: Buscamos el recibo original para mantener su número.
+                const oldRecibo = recibos.find(r => r.id === reciboEditandoId);
+                receiptNum = oldRecibo ? oldRecibo.numero : 'N/A'; // Mantenemos el número anterior
+            }
+
+            const nuevoRecibo = {
+                id: receiptId,
+                numero: receiptNum, // Usamos el número correcto
+                usuarioId: uid,
+                nombre: u.nombre,
+                contador: u.contador,
+                direccion: u.direccion,
+                fecha: hoy.toLocaleDateString('es-ES'),
+                mesFacturado: hoy.toLocaleDateString('es-ES',{month:'long',year:'numeric'}),
+                periodoDesde: periodoDesde,
+                periodoHasta: hoy.toLocaleDateString('es-ES'),
+                lecturaAnt: document.getElementById('f-lectura-ant').value,
+                lecturaActual: document.getElementById('f-lectura-act').value,
+                consumo: consumo.toFixed(2),
+                precioUnidad: precio.toFixed(2),
+                mora: moraVisual.toFixed(2),
+                moraDetalle: moraDetalle,
+                extra: extraVisual.toFixed(2),
+                extraDetalle: extraDetalle,
+                total: consumoMes,
+                estado: 'pendiente'
+            };
+
+            if (reciboEditandoId) {
+                // Lógica de Edición
+                const ix = recibos.findIndex(r => r.id === reciboEditandoId);
+                if (ix > -1) {
+                    recibos[ix] = nuevoRecibo;
+                    alert("✅ Recibo actualizado correctamente. N°: " + receiptNum);
+                }
+            } else {
+                // Lógica de Creación
+                recibos.push(nuevoRecibo);
+                alert("✅ Recibo generado correctamente. N°: " + receiptNum);
+
+                // Si el usuario tenía cargos pendientes de Trabajo de Calle, ya quedaron facturados: se limpian.
+                if (u && Array.isArray(u.cargosExtra) && u.cargosExtra.length > 0) {
+                    u.cargosExtra = [];
+                    localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
+                    if (typeof syncUsuario === 'function') syncUsuario(u);
+                }
+
+                 // ✨ NUEVO: Llamar a la impresión Bluetooth inmediatamente después de crear
+            imprimirBluetooth(receiptId);
+        }
+
+            // Muestra el aviso de "último recibo" para poder corregirlo o eliminarlo sin ir a Historial
+            mostrarAvisoUltimoRecibo(nuevoRecibo);
+
+            localStorage.setItem('agua_recibos', JSON.stringify(recibos));
+            if(typeof syncRecibo === 'function') syncRecibo(nuevoRecibo);
+
+            // Deja la pantalla de Facturación lista y limpia para el siguiente cliente
+            // (evita que al volver se vea el recibo recién generado como si no se hubiera "cerrado").
+            document.getElementById('f-lectura-act').value = '';
+            document.getElementById('f-usuario-id').value = '';
+            document.getElementById('input-f-usuario-search').value = '';
+            document.getElementById('f-usuario-resultados').innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
+            volverCaseriosFactura();
+            cargarDatosUsuarioFactura();
+            reciboEditandoId = null;
+            // Nos quedamos en Facturación (ya limpia arriba) para atender al siguiente cliente
+            // sin saltar a Historial.
+        }
+
+
+        // HISTORIAL Y ACCIONES
+        // ===== HISTORIAL: carga por lotes (evita cargar todo de golpe cuando hay muchos usuarios) =====
+        let historialFiltrados = [];
+        let historialMostrados = 0;
+        const HISTORIAL_LOTE = 25; // cuántos recibos se muestran por tanda
+
+        // Aplica los filtros de año/mes/estado sobre los recibos (sin tocar el DOM)
+        function computarFiltroHistorial() {
+            const fA = document.getElementById('filtro-anio').value; const fM = document.getElementById('filtro-mes').value; const fE = document.getElementById('filtro-estado').value;
+            const base = [...recibos].reverse().filter(r => {
+                const f = obtenerMesAnio(r.fecha);
+                if(fA !== 'todos' && f.anio != fA) return false;
+                if(fM !== 'todos' && f.mes != fM) return false;
+                if(fE !== 'todos' && r.estado !== fE) return false;
+                return true;
+            });
+
+            // Si un mismo cliente tiene varios recibos pendientes (DEBE), se agrupan en una sola fila
+            // con el total consolidado, en vez de mostrar cada mes adeudado por separado.
+            const resultado = [];
+            const indicePorUsuarioPendiente = {};
+            base.forEach(r => {
+                if (r.estado === 'pendiente') {
+                    if (indicePorUsuarioPendiente[r.usuarioId] !== undefined) {
+                        resultado[indicePorUsuarioPendiente[r.usuarioId]]._recibosAgrupados.push(r);
+                        return;
+                    }
+                    indicePorUsuarioPendiente[r.usuarioId] = resultado.length;
+                    resultado.push({ ...r, _recibosAgrupados: [r] });
+                } else {
+                    resultado.push(r);
+                }
+            });
+            return resultado;
+        }
+
+        // Reinicia la vista desde cero: se usa al cambiar filtros o al entrar a la pestaña Historial
+        function renderizarRecibos() {
+            historialFiltrados = computarFiltroHistorial();
+            historialMostrados = 0;
+            document.getElementById('lista-recibos').innerHTML = '';
+            renderizarLoteHistorial();
+        }
+
+        // Refresco "suave": se usa tras pagar/borrar un recibo o cuando llega una actualización en la nube.
+        // No reinicia el scroll: vuelve a mostrar la misma cantidad de recibos que ya estaban cargados.
+        function actualizarListaRecibosSiVisible() {
+            const historialEl = document.getElementById('historial');
+            if (!historialEl || !historialEl.classList.contains('active')) return; // no se está viendo: no perdemos tiempo redibujando
+
+            const previamenteMostrados = historialMostrados || HISTORIAL_LOTE;
+            historialFiltrados = computarFiltroHistorial();
+            historialMostrados = 0;
+            document.getElementById('lista-recibos').innerHTML = '';
+            renderizarLoteHistorial(Math.min(previamenteMostrados, historialFiltrados.length) || HISTORIAL_LOTE);
+        }
+
+        // Pinta el siguiente lote de recibos y agrega el botón "Cargar más" si aún faltan
+        function renderizarLoteHistorial(cantidad) {
+            const div = document.getElementById('lista-recibos');
+
+            const btnAnterior = document.getElementById('btn-cargar-mas-historial');
+            if (btnAnterior) btnAnterior.remove();
+
+            if (historialFiltrados.length === 0) {
+                div.innerHTML = '<p style="text-align:center; color:#999; padding:20px 0;">No hay recibos que coincidan con el filtro.</p>';
+                return;
+            }
+
+            const lote = cantidad || HISTORIAL_LOTE;
+            const siguienteLote = historialFiltrados.slice(historialMostrados, historialMostrados + lote);
+
+            // Construimos el HTML del lote en un array y lo insertamos de una sola vez (mucho más rápido que += en un loop)
+            const piezas = siguienteLote.map(r => {
+                const pag = r.estado === 'pagado';
+                const grupo = r._recibosAgrupados || [r];
+
+                if (!pag && grupo.length > 1) {
+                    // Varios recibos pendientes del mismo cliente: una sola tarjeta con el total y el detalle de cada mes.
+                    const totalGrupo = grupo.reduce((s, g) => s + totalRecibo(g), 0);
+                    const detalleMeses = grupo.map(g => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; padding:6px 0; border-top:1px dashed #ddd;">
+                            <span style="text-transform:capitalize;">${g.mesFacturado} (N° ${g.numero}) — $${totalRecibo(g).toFixed(2)}${parseFloat(g.extra) > 0 ? ' <span style="color:#e65100;">(incl. 🚧 $' + parseFloat(g.extra).toFixed(2) + ')</span>' : ''}</span>
+                            <button class="btn-danger" style="margin:0; padding:5px 8px; font-size:0.7rem; width:auto;" onclick="eliminarRecibo(${g.id})">🗑️</button>
+                        </div>`).join('');
+
+                    return `
+                    <div class="list-item">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <strong style="font-size:1rem;">${r.nombre}</strong> <span class="status-badge pendiente">DEBE</span>
+                        </div>
+                        <div style="color:#666; font-size:0.85rem; margin-bottom:10px;">🧾 ${grupo.length} recibos pendientes</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:1.3rem; font-weight:800; color:var(--danger);">$${totalGrupo.toFixed(2)}</span>
+                        </div>
+                        ${detalleMeses}
+                    </div>`;
+                }
+
+                return `
+                <div class="list-item">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <strong style="font-size:1rem;">${r.nombre}</strong> <span class="status-badge ${pag?'pagado':'pendiente'}">${pag?'PAGADO':'DEBE'}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; color:#666; font-size:0.85rem; margin-bottom:10px;">
+                        <span>📅 ${r.fecha}</span> <span>💧 ${r.consumo}m³</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="font-size:1.3rem; font-weight:800; color:var(--text-main);">$${totalRecibo(r).toFixed(2)}</span>
+                            ${parseFloat(r.extra) > 0 ? `<div style="font-size:0.7rem; color:#e65100;">🚧 incl. $${parseFloat(r.extra).toFixed(2)} Trabajo de Calle</div>` : ''}
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-bt" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto; color:white;" onclick="imprimirBluetooth(${r.id})">📱</button>
+                            <button class="btn-primary" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto;" onclick="imprimirPDF(${r.id})">📄</button>
+                            <button class="btn-danger" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto;" onclick="eliminarRecibo(${r.id})">🗑️</button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            div.insertAdjacentHTML('beforeend', piezas.join(''));
+            historialMostrados += siguienteLote.length;
+
+            if (historialMostrados < historialFiltrados.length) {
+                const restantes = historialFiltrados.length - historialMostrados;
+                const btn = document.createElement('button');
+                btn.id = 'btn-cargar-mas-historial';
+                btn.className = 'btn-outline';
+                btn.style.cssText = 'width:100%; margin:15px 0 30px;';
+                btn.innerText = `⬇️ Cargar más (${restantes} restantes)`;
+                btn.onclick = () => renderizarLoteHistorial();
+                div.appendChild(btn);
+            }
+        }
+        // Carga automática al acercarse al final de la pantalla (no hace falta tocar el botón)
+        let historialCargandoAuto = false;
+        function manejarScrollHistorial() {
+            const hist = document.getElementById('historial');
+            if (!hist || !hist.classList.contains('active')) return; // solo aplica si Historial está visible
+
+            const btn = document.getElementById('btn-cargar-mas-historial');
+            if (!btn) return; // ya no hay más recibos por cargar
+
+            if (historialCargandoAuto) return;
+
+            const distanciaAlFinal = document.documentElement.scrollHeight - (window.innerHeight + window.scrollY);
+            if (distanciaAlFinal < 400) {
+                historialCargandoAuto = true;
+                renderizarLoteHistorial();
+                // pequeña pausa para dejar que el DOM se actualice antes de evaluar el siguiente scroll
+                setTimeout(() => { historialCargandoAuto = false; }, 150);
+            }
+        }
+        window.addEventListener('scroll', manejarScrollHistorial, { passive: true });
+        // ===== FIN HISTORIAL POR LOTES =====
+
+           // ⚠️ FUNCIÓN FINAL Y CORREGIDA PARA EVITAR DUPLICIDAD EN CAJA CHICA ⚠️
+        function pagarRecibo(id) {
+            const reciboActual = recibos.find(r => r.id == id);
+            if(!reciboActual) return;
+
+            // 1. Obtener todos los recibos ANTERIORES que están pendientes (componen la Mora)
+            const recibosPendientesAnteriores = recibos.filter(r =>
+                r.usuarioId == reciboActual.usuarioId &&
+                r.estado === 'pendiente' &&
+                r.id < id
+            );
+
+            // 2. CALCULAR MONTO TOTAL REAL PAGADO (Esto elimina la duplicidad)
+
+            // A. Suma de la Deuda Acumulada (Mora): Sumamos el total de CADA recibo pendiente
+            const deudaAcumulada = recibosPendientesAnteriores.reduce((acc, r) => acc + totalRecibo(r), 0);
+
+            // B. Costo del Recibo Actual (solo el servicio de este mes)
+            const costoReciboActual = parseFloat(reciboActual.total) || 0;
+            const extraReciboActual = parseFloat(reciboActual.extra) || 0;
+
+            // C. TOTAL PAGADO (Esto es lo ÚNICO que debe entrar a Caja Chica: 8 + 8 = 16)
+            const montoTotalRecaudado = deudaAcumulada + costoReciboActual + extraReciboActual;
+
+            const lineasConfirm = [];
+            if (deudaAcumulada > 0) lineasConfirm.push(`Saldo anterior (${recibosPendientesAnteriores.length} recibo${recibosPendientesAnteriores.length > 1 ? 's' : ''}): $${deudaAcumulada.toFixed(2)}`);
+            lineasConfirm.push(`Consumo ${reciboActual.mesFacturado}: $${costoReciboActual.toFixed(2)}`);
+            if (extraReciboActual > 0) lineasConfirm.push(`🚧 Trabajo de Calle: $${extraReciboActual.toFixed(2)}`);
+            const confirmMsg = `¿Confirmar pago?\n\n${lineasConfirm.join('\n')}\n\nTOTAL A COBRAR: $${montoTotalRecaudado.toFixed(2)}`;
+            if(!confirm(confirmMsg)) return;
+
+            const ix = recibos.findIndex(r => r.id == id);
+            if(ix > -1) {
+                const fechaPagoAhora = new Date().toLocaleDateString('es-ES');
+                const horaPagoAhora = new Date().toLocaleTimeString('es-ES');
+
+                // 3. MARCAR RECIBOS COMO PAGADOS (Limpieza de Mora)
+                // Marcar el recibo actual como pagado
+                recibos[ix].estado = 'pagado';
+                recibos[ix].fechaPago = fechaPagoAhora;
+                recibos[ix].horaPago = horaPagoAhora;
+
+                // Marcar los recibos anteriores como pagados (los que componen la deuda)
+                recibosPendientesAnteriores.forEach(reciboViejo => {
+                    const indexViejo = recibos.findIndex(r => r.id === reciboViejo.id);
+                    if (indexViejo > -1) {
+                        recibos[indexViejo].estado = 'pagado';
+                        recibos[indexViejo].fechaPago = fechaPagoAhora;
+                        recibos[indexViejo].horaPago = horaPagoAhora;
+                    }
+                });
+                localStorage.setItem('agua_recibos', JSON.stringify(recibos));
+                if(typeof syncRecibo === 'function') {
+                    syncRecibo(recibos[ix]);
+                    recibosPendientesAnteriores.forEach(rv => syncRecibo(recibos.find(r => r.id === rv.id)));
+                }
+
+                // 4 y 5. REGISTRO EN CONTABILIDAD (AGUA_CONTABILIDAD) Y CAJA CHICA (CAJA_MOVIMIENTOS)
+                // IMPORTANTE: se registra UN movimiento POR CADA recibo pagado (no uno combinado), cada uno
+                // con su propio reciboId y su propio monto. Así, si más adelante se borra cualquiera de estos
+                // recibos por separado, el sistema encuentra y descuenta exactamente lo suyo de Caja, sin
+                // dejar sobrantes ni afectar el registro de los demás recibos del mismo pago.
+                let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+                const todosLosRecibosPagados = [recibos[ix], ...recibosPendientesAnteriores.map(rv => recibos.find(r => r.id === rv.id))];
+
+                todosLosRecibosPagados.forEach((rp, idx) => {
+                    const consumoRp = parseFloat(rp.total) || 0;
+                    const extraRp = parseFloat(rp.extra) || 0;
+                    const totalRp = consumoRp + extraRp;
+                    const idBase = Date.now() + idx; // evita colisión de ids si se generan en el mismo milisegundo
+
+                    const nuevoMovContable = {
+                        id: idBase,
+                        fecha: new Date().toLocaleDateString('es-ES'),
+                        reciboId: rp.id,
+                        monto: totalRp,
+                        cliente: rp.nombre
+                    };
+                    contabilidad.push(nuevoMovContable);
+                    if(typeof syncContabilidad === 'function') syncContabilidad(nuevoMovContable);
+
+                    const itemsCaja = [{ desc: "Consumo Agua: " + rp.nombre + " (#" + rp.numero + ") - " + rp.mesFacturado, cant: 1, precio: consumoRp }];
+                    if (extraRp > 0) {
+                        itemsCaja.push({ desc: "Trabajo de Calle: " + rp.nombre + (rp.extraDetalle ? " - " + rp.extraDetalle : ""), cant: 1, precio: extraRp });
+                    }
+                    const movimientoCajaChica = {
+                        id: idBase + 100000, // se evita compartir id con el registro de contabilidad
+                        tipo: 'entrada',
+                        reciboId: rp.id,
+                        fecha: new Date().toLocaleDateString('es-ES'),
+                        hora: new Date().toLocaleTimeString('es-ES'),
+                        timestamp: Date.now(),
+                        admin: 'Sistema de Agua (Recaudación)',
+                        concepto: 'Recaudación Agua: ' + rp.nombre + ' (' + rp.mesFacturado + ')',
+                        recibe: 'Sistema de Agua',
+                        total: totalRp,
+                        items: itemsCaja
+                    };
+                    movimientosCaja.push(movimientoCajaChica);
+                    if (typeof syncMovimientoCaja === 'function') syncMovimientoCaja(movimientoCajaChica);
+                });
+
+                localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+                localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+
+                // 6. PREPARAR E IMPRIMIR BLUETOOTH
+                // Clonamos el recibo para enviar la información correcta a la impresora:
+                const tempRecibo = JSON.parse(JSON.stringify(recibos[ix]));
+                // Mora para el ticket es la deuda acumulada, no el campo .mora del recibo
+                tempRecibo.mora = deudaAcumulada.toFixed(2);
+                tempRecibo.moraDetalle = recibosPendientesAnteriores.map(rv => rv.mesFacturado + ' ($' + totalRecibo(rv).toFixed(2) + ')').join(', ');
+                tempRecibo.total = costoReciboActual.toFixed(2);
+                tempRecibo.extra = extraReciboActual.toFixed(2);
+                imprimirBluetooth(tempRecibo); // El PDF se sigue generando manualmente
+
+                actualizarDashboard();
+                actualizarListaRecibosSiVisible();
+            }
+        }
+
+
+        function eliminarRecibo(id) {
+            if(!confirm("¿Eliminar?")) return;
+            const ix = recibos.findIndex(r => r.id == id);
+            if(ix > -1) {
+                if(recibos[ix].estado === 'pagado') {
+                    const cIx = contabilidad.findIndex(c => c.reciboId == id);
+                    if(cIx > -1) {
+                        const cId = contabilidad[cIx].id;
+                        contabilidad.splice(cIx, 1); localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+                        if(typeof eliminarContabilidadNube === 'function') eliminarContabilidadNube(cId);
+                    }
+                    // Borra también el/los movimientos de Caja Chica generados por este recibo (evita saldo fantasma en Caja).
+                    let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+                    const movsAsociados = movimientosCaja.filter(m => m.reciboId == id || m.id == id);
+                    if (movsAsociados.length > 0) {
+                        movimientosCaja = movimientosCaja.filter(m => !(m.reciboId == id || m.id == id));
+                        localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+                        movsAsociados.forEach(m => { if (typeof eliminarMovimientoCajaNube === 'function') eliminarMovimientoCajaNube(m.id); });
+                    }
+                }
+                recibos.splice(ix, 1); localStorage.setItem('agua_recibos', JSON.stringify(recibos)); actualizarDashboard(); actualizarListaRecibosSiVisible();
+                if(typeof eliminarReciboNube === 'function') eliminarReciboNube(id);
+            }
+        }
+
+        // Función auxiliar para que funcionen las tildes y la Ñ en Bluetooth
+        function utf8_to_b64(str) {
+            return window.btoa(unescape(encodeURIComponent(str)));
+        }
+
+        // --- IMPRESIÓN BLUETOOTH OPTIMIZADA ---
+        function imprimirBluetooth(idOrRecibo) {
+            const r = (idOrRecibo && typeof idOrRecibo === 'object') ? idOrRecibo : recibos.find(x => x.id == idOrRecibo);
+            if(!r) return;
+
+            const pagado = r.estado === 'pagado';
+            const num = r.numero || 'N/A';
+            const montoMes = parseFloat(r.total);
+            const deudaPendiente = parseFloat(r.mora) || 0;
+            const extra = parseFloat(r.extra) || 0;
+            const granTotal = montoMes + deudaPendiente + extra;
+
+            // Comandos ESC/POS para negrita (RawBT los interpreta directamente en la impresora térmica)
+            const NEGRITA_ON = "\x1B\x45\x01";
+            const NEGRITA_OFF = "\x1B\x45\x00";
+
+            // Centrado manual simple para 32 columnas (Ancho estándar 58mm)
+            // Usamos \x1B\x61\x01 para centrar si la app RawBT lo soporta,
+            // pero por seguridad usamos espacios para el encabezado.
+
+            let t = "";
+
+            // Encabezado
+            t += "           ACOMAACAP\n";
+            t += "      Canton Las Piletas\n";
+            t += "        Santa Ana Este\n";
+            t += "--------------------------------\n"; // 32 caracteres
+
+            if (pagado) {
+                t += NEGRITA_ON;
+                t += "     *** RECIBO CANCELADO ***\n";
+                t += NEGRITA_OFF;
+                t += "--------------------------------\n";
+            }
+
+            // Datos del Recibo
+            t += `Recibo: ${num}\n`;
+            t += `Fecha:  ${r.fecha}\n`;
+            if (pagado) t += `Pagado: ${r.fechaPago || r.fecha}${r.horaPago ? ' ' + r.horaPago.substring(0,5) : ''}\n`;
+            t += `MES:    ${(r.mesFacturado||'').toUpperCase()}\n`;
+            t += "--------------------------------\n";
+
+            // Datos del Cliente (Cortamos nombres largos para que no rompan línea)
+            // .substring(0, 32) asegura que no se desborde feo
+            t += `Cliente:\n${r.nombre.substring(0, 32)}\n`;
+            t += `Ubicacion: ${r.direccion.substring(0, 20)}\n`;
+            t += `Contador:  ${r.contador}\n`;
+            t += "--------------------------------\n";
+
+            // Lecturas
+            t += `Periodo:  ${r.periodoDesde || '---'} al ${r.periodoHasta || r.fecha}\n`;
+            t += `Lect. Actual:   ${r.lecturaActual}\n`;
+            t += `Lect. Anterior: ${r.lecturaAnt}\n`;
+            t += `Consumo:        ${r.consumo} m3\n`;
+            t += `Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}\n`;
+            t += "--------------------------------\n";
+
+            // Totales
+            // Alineamos los montos a la derecha visualmente
+            t += `Servicio Mes:     $${montoMes.toFixed(2).padStart(7)}\n`;
+
+            if(extra > 0) {
+                t += `Trabajo de Calle: $${extra.toFixed(2).padStart(7)}\n`;
+                if (r.extraDetalle) t += `  (${r.extraDetalle.substring(0,30)})\n`;
+            }
+
+            if(deudaPendiente > 0) {
+                t += `Saldo ${pagado ? 'Incluido' : 'Pendiente'}:  $${deudaPendiente.toFixed(2).padStart(7)}\n`;
+                if (r.moraDetalle) t += `  (Corresponde a: ${r.moraDetalle.substring(0,60)})\n`;
+            }
+
+            t += "\n";
+            t += NEGRITA_ON;
+            if (pagado) {
+                t += `TOTAL PAGADO:     $${granTotal.toFixed(2).padStart(7)}\n`;
+            } else {
+                t += `TOTAL A PAGAR:    $${granTotal.toFixed(2).padStart(7)}\n`;
+            }
+            t += NEGRITA_OFF;
+            t += "--------------------------------\n";
+
+            if(!pagado && deudaPendiente > 0) {
+                t += "\n      ** AVISO DE MORA **\n";
+                t += "Favor cancelar saldo pendiente\n";
+                t += "para evitar suspension.\n";
+                t += "--------------------------------\n";
+            }
+
+            t += "\n\n";
+            if (pagado) {
+                t += "GRACIAS POR SU PAGO!!\n";
+                t += "Conserve este comprobante como\n";
+                t += "constancia de su pago.\n";
+            } else {
+                t += "Recuerde que tiene 7 dias\n"; t += "habiles para pagar su factura \n";
+            }
+            t += "\n\n\n"; // Espacio final para cortar papel
+
+            // CAMBIO IMPORTANTE: Usamos la función segura para acentos
+            const base64Str = utf8_to_b64(t);
+
+            window.location.href = "rawbt:base64," + base64Str;
+        }
+
+
+             // --- IMPRESIÓN PDF CORREGIDA ---
+        function imprimirPDF(id) {
+            const r = recibos.find(x => x.id == id);
+            if(!r) return;
+
+            const pagado = r.estado === 'pagado';
+
+            // ... (Lógica de llenado de datos igual que antes: t-numero, t-cliente, etc) ...
+            const num = r.numero || 'N/A';
+            const montoMes = parseFloat(r.total);
+            const deudaPendiente = parseFloat(r.mora) || 0;
+            const extra = parseFloat(r.extra) || 0;
+            const granTotal = montoMes + deudaPendiente + extra;
+
+            document.getElementById('t-numero').innerText = num;
+            document.getElementById('t-fecha').innerText = r.fecha;
+            document.getElementById('t-mes-facturado').innerText = (r.mesFacturado || '').toUpperCase();
+            document.getElementById('t-periodo').innerText = (r.periodoDesde || '---') + ' al ' + (r.periodoHasta || r.fecha);
+            document.getElementById('t-cliente').innerText = r.nombre;
+            document.getElementById('t-direccion').innerText = r.direccion || '---';
+            document.getElementById('t-contador').innerText = r.contador;
+            document.getElementById('t-lectura-act').innerText = r.lecturaActual;
+            document.getElementById('t-lectura-ant').innerText = r.lecturaAnt;
+            document.getElementById('t-consumo').innerText = r.consumo + ' m³';
+            document.getElementById('t-precio').innerText = '$' + parseFloat(r.precioUnidad).toFixed(2);
+            document.getElementById('t-subtotal').innerText = '$' + montoMes.toFixed(2);
+            document.getElementById('t-mora').innerText = '$' + deudaPendiente.toFixed(2);
+            document.getElementById('t-total').innerText = '$' + granTotal.toFixed(2);
+
+            // Sello de "CANCELADO" y textos que cambian según si ya está pagado
+            document.getElementById('t-sello-cancelado').style.display = pagado ? 'block' : 'none';
+            const filaFechaPago = document.getElementById('t-fila-fecha-pago');
+            if (pagado) {
+                document.getElementById('t-fecha-pago').innerText = (r.fechaPago || r.fecha) + (r.horaPago ? ' ' + r.horaPago.substring(0,5) : '');
+                filaFechaPago.style.display = 'block';
+            } else {
+                filaFechaPago.style.display = 'none';
+            }
+            document.getElementById('t-label-mora').innerText = pagado ? 'Saldo Incluido:' : 'Saldo Ant/Mora:';
+            document.getElementById('t-label-total').innerText = pagado ? 'TOTAL PAGADO' : 'TOTAL';
+            document.getElementById('t-footer-linea1').innerText = pagado ? '¡GRACIAS POR SU PAGO!' : '';
+            document.getElementById('t-footer-linea2').innerText = pagado
+                ? 'Conserve este comprobante como constancia de su pago.'
+                : 'Recuerde que tiene 7 dias habiles para pagar su factura despues de haber sido entregada';
+
+            const filaMoraDetalle = document.getElementById('t-fila-mora-detalle');
+            if (deudaPendiente > 0 && r.moraDetalle) {
+                document.getElementById('t-mora-detalle').innerText = r.moraDetalle;
+                filaMoraDetalle.style.display = 'block';
+            } else {
+                filaMoraDetalle.style.display = 'none';
+            }
+
+            const filaExtra = document.getElementById('t-fila-extra');
+            if (extra > 0) {
+                document.getElementById('t-extra').innerText = '$' + extra.toFixed(2) + (r.extraDetalle ? ' (' + r.extraDetalle + ')' : '');
+                filaExtra.style.display = 'flex';
+            } else {
+                filaExtra.style.display = 'none';
+            }
+
+            const avisoDiv = document.getElementById('t-aviso-mora');
+            if (!pagado && deudaPendiente > 0) {
+                avisoDiv.innerText = 'AVISO: Saldo en mora. Favor cancelar para evitar cortes.';
+                avisoDiv.style.display = 'block';
+            } else {
+                avisoDiv.style.display = 'none';
+            }
+
+            const el = document.getElementById('ticket-container');
+            el.style.position = 'static';
+            el.style.display = 'block';
+
+            if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
+                const opt = {
+                    margin:       2,
+                    filename:     `Recibo_${r.nombre}_${num}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+                    jsPDF:        { unit: 'mm', format: [80, 200], orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(el).output('datauristring').then(function (pdfBase64) {
+                    Android.guardarArchivo(pdfBase64, `Recibo_${num}.pdf`, "application/pdf");
+                    el.style.position = 'absolute';
+                    el.style.left = '-9999px';
+                    avisoDiv.style.display = 'none';
+                });
+            } else {
+                // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
+                document.title = `Recibo_${num}`;
+                imprimirConSistema('ticket-container').then(() => {
+                    el.style.position = 'absolute';
+                    el.style.left = '-9999px';
+                    avisoDiv.style.display = 'none';
+                    document.title = 'ACOMAACAP v9';
+                });
+            }
+        }
+
+
+        function actualizarDashboard() { document.getElementById('dash-pendientes').innerText = recibos.filter(r => r.estado === 'pendiente').length; }
+         { const a = new Date().getFullYear(); document.getElementById('cont-anio').innerHTML = `<option value="${a}">${a}</option><option value="${a-1}">${a-1}</option>`; document.getElementById('cont-mes').value = new Date().getMonth() + 1; }
+
+                // --- NUEVAS FUNCIONES DE CONTABILIDAD CON FILTRO POR DÍA Y CARGA POR DEFECTO DEL DÍA ACTUAL ---
+
+        function cargarFiltrosContabilidad() {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1; // 1 a 12
+            const currentDay = today.getDate(); // 1 a 31
+
+            // Cargar Años
+            const selectAnio = document.getElementById('cont-anio');
+            selectAnio.innerHTML = `<option value="${currentYear}">${currentYear}</option><option value="${currentYear-1}">${currentYear-1}</option>`;
+            selectAnio.value = currentYear; // Seleccionar año actual por defecto
+
+            // Seleccionar mes actual por defecto
+            document.getElementById('cont-mes').value = currentMonth;
+
+            // Cargar los días del 1 al 31
+            const selectDia = document.getElementById('cont-dia');
+            let htmlDias = '<option value="todos">Todo el Mes</option>';
+            for(let i=1; i<=31; i++){
+                htmlDias += `<option value="${i}">${i}</option>`;
+            }
+            selectDia.innerHTML = htmlDias;
+
+            // NUEVO: Seleccionar el día actual por defecto
+            selectDia.value = currentDay;
+
+            // Llamar a la función de resumen para cargar los datos del día actual
+            actualizarResumenContable();
+        }
+
+        function actualizarResumenContable() {
+            const cA = document.getElementById('cont-anio').value;
+            const cM = document.getElementById('cont-mes').value;
+            const cD = document.getElementById('cont-dia').value;
+
+            let total = 0;
+            const tbody = document.getElementById('tabla-contabilidad');
+            tbody.innerHTML = '';
+
+            // Filtramos y procesamos
+            // Usamos [...contabilidad].reverse() para mostrar primero las transacciones más recientes
+            [...contabilidad].reverse().forEach(c => {
+                const f = obtenerMesAnio(c.fecha);
+
+                // Obtenemos el día de la fecha (dd/mm/yyyy) -> split('/')[0]
+                const diaTransaccion = parseInt(c.fecha.split('/')[0]);
+
+                // 1. Filtro de Año
+                if (f.anio != cA) return;
+
+                // 2. Filtro de Mes (si no es 'todos')
+                if (cM !== 'todos' && f.mes != cM) return;
+
+                // 3. Filtro de Día (si no es 'todos')
+                if (cD !== 'todos' && diaTransaccion != cD) return;
+
+                // Si pasa los filtros, sumamos
+                total += c.monto;
+                tbody.innerHTML += `
+                    <tr>
+                        <td data-label="Fecha">${c.fecha}</td>
+                        <td data-label="Cliente">${c.cliente}</td>
+                        <td data-label="Monto" style="font-weight:bold; color:var(--secondary);">$${c.monto.toFixed(2)}</td>
+                    </tr>`;
+            });
+
+            // Actualizar Total Grande
+            document.getElementById('cont-total-periodo').innerText = '$' + total.toFixed(2);
+
+            // Actualizar Texto descriptivo
+            let mName = cM === 'todos' ? "Todo el Año" : document.querySelector(`#cont-mes option[value="${cM}"]`).innerText;
+            let dName = cD === 'todos' ? "" : `(Día ${cD})`;
+
+            document.getElementById('cont-texto-periodo').innerText = `Reporte: ${mName} ${cA} ${dName}`;
+        }
+
+        // --- FUNCIÓN AGREGADA: EXPORTAR CLIENTES SIMPLIFICADA (FINAL) ---
+    function exportarClientesSimplificado() {
+        if (!confirm("¿Desea exportar la Base de Clientes (Lite)? Esto solo incluye Nombres, Medidores, Dirección y la Última Lectura registrada.")) {
+            return;
+        }
+
+        // 1. Crear el array simplificado:
+        const clientesLite = usuarios.map(u => {
+
+            // LÓGICA REFORZADA: Buscar la última lectura real en recibos (r.lecturaActual)
+            const usuarioIdNum = parseInt(u.id);
+
+            const recibosUsuario = recibos.filter(r =>
+                (parseInt(r.usuarioId) === usuarioIdNum) &&
+                (parseFloat(r.lecturaActual) > 0) // Usamos lecturaActual del recibo
+            );
+
+            let ultimaLecturaReal = 0;
+
+            if (recibosUsuario.length > 0) {
+                recibosUsuario.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+                ultimaLecturaReal = parseFloat(recibosUsuario[0].lecturaActual);
+            }
+
+            if (ultimaLecturaReal === 0 || isNaN(ultimaLecturaReal)) {
+                 ultimaLecturaReal = parseFloat(u.ultimaLectura) || 0;
+            }
+
+            ultimaLecturaReal = ultimaLecturaReal.toFixed(0);
+
+            return {
+                id: u.id,
+                nombre: u.nombre,
+                contador: u.contador,
+                direccion: u.direccion, // 🔑 CAMPO CLAVE: Caserío
+                ultimaLectura: ultimaLecturaReal // 🔑 CAMPO CLAVE: Última Lectura
+            };
+        });
+
+        const dataStr = JSON.stringify(clientesLite, null, 2);
+
+        // 2. Generar nombre de archivo y descargar
+        const filename = `Clientes_Lite_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+        const base64 = btoa(unescape(encodeURIComponent(dataStr)));
+
+        if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+             Android.guardarArchivo(base64, filename, 'application/json');
+             alert(`✅ Exportación Lite completada. Archivo:\n${filename}`);
+        } else {
+            // Fallback para navegador
+            const dataUri = "data:text/json;charset=utf-8," + encodeURIComponent(dataStr);
+            const dl = document.createElement('a');
+            dl.setAttribute("href", dataUri);
+            dl.setAttribute("download", filename);
+            document.body.appendChild(dl); dl.click(); dl.remove();
+            alert(`✅ Exportación Lite descargada como:\n${filename}`);
+        }
+    }
+
+    // --- FUNCIÓN AGREGADA: IMPORTAR CLIENTES SIMPLIFICADA (FINAL) ---
+    function procesarImportacionClientes(input) {
+        if (!input.files.length) return;
+
+        if (!confirm("⚠️ ADVERTENCIA: Esta acción REEMPLAZARÁ completamente la lista de Clientes y BORRARÁ todos los Recibos e Historial de Contabilidad. ¿Desea continuar?")) {
+            input.value = '';
+            return;
+        }
+
+        const file = input.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            try {
+                const dataStr = e.target.result;
+                const clientesLite = JSON.parse(dataStr);
+
+                // 1. Validación de datos: Exige los 5 campos esenciales
+                if (!Array.isArray(clientesLite) || clientesLite.length === 0 ||
+                    !clientesLite.every(item => item.id && item.nombre && item.contador && item.direccion && item.ultimaLectura)) {
+
+                     throw new Error("El archivo no es una lista Lite válida. Asegúrese que tenga ID, Nombre, Contador, Dirección, y Última Lectura.");
+                }
+
+                // 2. APLICAR CAMBIOS Y GUARDAR EN PERSISTENCIA (USANDO LOCALSTORAGE)
+
+                // A. REEMPLAZAR LA BASE DE CLIENTES
+                usuarios = clientesLite;
+                localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
+
+                // B. REINICIAR BASES DE DATOS DE HISTORIAL (CRUCIAL: Evita conflictos de Mora)
+                recibos = [];
+                contabilidad = [];
+                lastReciboNum = 0;
+
+                localStorage.setItem('agua_recibos', JSON.stringify(recibos));
+                localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+                localStorage.setItem('agua_last_recibo_num', lastReciboNum);
+
+                // 3. Éxito y ACTUALIZACIÓN COMPLETA DE LA INTERFAZ
+                actualizarDashboard();
+
+                // Llama a la función que redibuja la lista de caseríos (para que aparezcan)
+                if (typeof volverACaserios === 'function') {
+                    volverACaserios();
+                }
+
+                // Navegar a la sección 'usuarios' para ver los resultados
+                mostrarSeccion('usuarios');
+
+                alert(`✅ Base de ${clientesLite.length} Clientes importada con éxito. El sistema de recibos ha sido REINICIADO.`);
+
+            } catch (error) {
+                console.error("Error al procesar el archivo:", error);
+                alert("❌ ERROR en la importación Lite: " + error.message);
+            } finally {
+                input.value = '';
+            }
+        };
+
+        reader.readAsText(file);
+    }
+
+
+        function descargarBackup() {
+            const datos = { fecha: new Date().toISOString(), version: "9.0", usuarios, recibos, contabilidad };
+            const jsonStr = JSON.stringify(datos);
+
+            // Convertir a Base64 para enviarlo a Android
+            const base64 = btoa(unescape(encodeURIComponent(jsonStr)));
+            const nombreArchivo = "Backup_Agua_" + new Date().getTime() + ".json";
+
+            // Detectar si estamos en la App Android o en PC
+            if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                Android.guardarArchivo(base64, nombreArchivo, "application/json");
+            } else {
+                // Modo PC (para cuando pruebes en el navegador)
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonStr);
+                const dl = document.createElement('a');
+                dl.setAttribute("href", dataStr);
+                dl.setAttribute("download", nombreArchivo);
+                document.body.appendChild(dl); dl.click(); dl.remove();
+            }
+        }
+
+        function procesarRestauracion(input) { const file = input.files[0]; if(!file) return; if(!confirm("⚠️ Se reemplazarán los datos locales y se subirán a la nube. Puede tardar unos segundos.")) return; const reader = new FileReader(); reader.onload = async function(e) { try { const d = JSON.parse(e.target.result); if(d.usuarios && d.recibos) { usuarios=d.usuarios; recibos=d.recibos; contabilidad=d.contabilidad||[]; localStorage.setItem('agua_usuarios',JSON.stringify(usuarios)); localStorage.setItem('agua_recibos',JSON.stringify(recibos)); localStorage.setItem('agua_contabilidad',JSON.stringify(contabilidad)); if (typeof subirBackupANube === 'function') { alert('Subiendo ' + usuarios.length + ' usuarios, ' + recibos.length + ' recibos y ' + contabilidad.length + ' movimientos a la nube. No cierres la app...'); await subirBackupANube(usuarios, recibos, contabilidad); alert('✅ Backup restaurado y sincronizado con la nube.'); } location.reload(); } } catch(err){ console.error(err); alert("Error archivo"); } }; reader.readAsText(file); }
+        // ⚠️ SUSTITUIR ESTA FUNCIÓN COMPLETA ⚠️
+        function borrarTodo() {
+            // Establecer una contraseña maestra de ejemplo
+            const MASTER_KEY = 'BORRAR';
+
+            // 1. Confirmación inicial
+            if (!confirm("⚠️ ZONA DE PELIGRO: ¿Estás ABSOLUTAMENTE seguro de borrar TODOS los datos? Esta acción es irreversible.")) {
+                return;
+            }
+
+            // 2. Solicitar contraseña
+            const password = prompt("Ingrese la contraseña de seguridad para confirmar el borrado total:");
+
+            // 3. Verificar contraseña
+            if (password === MASTER_KEY) {
+                localStorage.clear();
+                alert("✅ Todos los datos han sido borrados. La aplicación se recargará.");
+                location.reload();
+            } else if (password !== null) {
+                alert("❌ Contraseña incorrecta. La operación ha sido cancelada.");
+            }
+            // Si el usuario presiona Cancelar en el prompt, no sucede nada.
+        }
+
+        // --- NUEVA FUNCIÓN DE BÚSQUEDA GLOBAL ---
+        function ejecutarBusquedaGlobal() {
+            const texto = document.getElementById('input-buscador-global').value.toLowerCase();
+            const div = document.getElementById('resultados-globales');
+            div.innerHTML = '';
+
+            if(texto.length === 0) return;
+
+            const encontrados = usuarios.filter(u =>
+                u.nombre.toLowerCase().includes(texto) ||
+                u.contador.includes(texto)
+            );
+
+            if(encontrados.length === 0) {
+                div.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">No se encontraron resultados.</p>';
+                return;
+            }
+
+            encontrados.forEach(u => {
+                const deuda = recibos.filter(r => r.usuarioId == u.id && r.estado === 'pendiente')
+                                     .reduce((acc, r) => acc + totalRecibo(r), 0);
+
+                const estadoHtml = deuda > 0
+                    ? `<span style="color:var(--danger); font-weight:bold;">⚠️ Debe $${deuda.toFixed(2)}</span>`
+                    : `<span style="color:var(--secondary); font-weight:bold;">✅ Al día</span>`;
+
+                // ⚠️ La clave es el "true" en el onclick:
+                div.innerHTML += `
+                <div class="list-item" onclick="mostrarPerfilUsuario(${u.id}, true)" style="cursor:pointer; padding:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <strong style="font-size:1.1rem;">${u.nombre}</strong><br>
+                            <small style="color:#666;">${u.direccion} | #${u.contador}</small>
+                        </div>
+                        <div style="text-align:right;">
+                            ${estadoHtml}<br>
+                            <small style="color:#0288d1; font-size:0.8rem;">Ver Detalle</small>
+                        </div>
+                    </div>
+                </div>`;
+            });
+        }
+
+        // ============ NAVEGACIÓN POR CASERÍO (solo nombres) - BÚSQUEDA ============
+        let caserioBusquedaSeleccionado = null;
+
+        function abrirCaserioBusqueda(nombre) {
+            registrarPasoAtras(() => volverCaseriosBusqueda());
+            caserioBusquedaSeleccionado = nombre;
+            document.getElementById('busqueda-vista-caserios').style.display = 'none';
+            document.getElementById('busqueda-vista-nombres').style.display = 'block';
+            document.getElementById('busqueda-titulo-caserio').innerText = nombre;
+            renderizarNombresBusqueda();
+        }
+
+        function volverCaseriosBusqueda() {
+            caserioBusquedaSeleccionado = null;
+            document.getElementById('busqueda-vista-caserios').style.display = 'grid';
+            document.getElementById('busqueda-vista-nombres').style.display = 'none';
+        }
+
+        function renderizarNombresBusqueda() {
+            const div = document.getElementById('busqueda-lista-nombres');
+            const lista = usuarios
+                .filter(u => u.direccion === caserioBusquedaSeleccionado)
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            if (lista.length === 0) {
+                div.innerHTML = '<p style="padding:15px; text-align:center; color:#999; margin:0;">No hay usuarios registrados en este caserío.</p>';
+                return;
+            }
+
+            // Solo el nombre, seleccionable, para ir directo a generar la factura
+            div.innerHTML = lista.map(u => `
+                <div style="padding:14px 16px; border-bottom:1px solid #eee; cursor:pointer; font-weight:600;"
+                     onclick="seleccionarDesdeBusqueda(${u.id})">
+                    ${u.nombre}
+                </div>`).join('');
+        }
+
+        // Cierra el buscador de caserío de Búsqueda y lleva directo a generar la factura
+        function seleccionarDesdeBusqueda(id) {
+            volverCaseriosBusqueda();
+            iniciarFacturaUsuario(id);
+        }
+        // ============================================================================
+
+    </script>
+
+    <!-- ============================================================
+         ☁️ MÓDULO FIREBASE: autenticación + sincronización en tiempo real
+         ============================================================ -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        import {
+            getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+        } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+        import {
+            initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+            collection, doc, setDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, writeBatch
+        } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDeMlSIltDHNz2-l-cgDkDLpYa6ZX6kL4Q",
+            authDomain: "sistema-de-agua-acomaacap.firebaseapp.com",
+            projectId: "sistema-de-agua-acomaacap",
+            storageBucket: "sistema-de-agua-acomaacap.firebasestorage.app",
+            messagingSenderId: "170438583247",
+            appId: "1:170438583247:web:531ee82a7a12b3fec7e8ba",
+            measurementId: "G-K8T5SR9FTQ"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const auth = getAuth(fbApp);
+        // Cache local persistente: la app sigue funcionando sin internet y sincroniza al reconectar.
+        const db = initializeFirestore(fbApp, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+
+        function setSyncText(txt) {
+            const a = document.getElementById('sync-status');
+            const b = document.getElementById('sync-status-detalle');
+            if (a) a.innerText = txt;
+            if (b) b.innerText = txt;
+        }
+
+        // ---------- LOGIN ----------
+        window.iniciarSesion = function () {
+            const email = document.getElementById('login-email').value.trim();
+            const pass = document.getElementById('login-pass').value;
+            const errBox = document.getElementById('login-error');
+            const btn = document.getElementById('btn-login');
+            errBox.style.display = 'none';
+            if (!email || !pass) { errBox.innerText = 'Ingresa correo y contraseña.'; errBox.style.display = 'block'; return; }
+            btn.disabled = true; btn.innerText = 'Entrando...';
+            signInWithEmailAndPassword(auth, email, pass)
+                .catch(() => { errBox.innerText = '❌ Correo o contraseña incorrectos.'; errBox.style.display = 'block'; })
+                .finally(() => { btn.disabled = false; btn.innerText = '🔑 Entrar'; });
+        };
+
+        window.cerrarSesion = function () {
+            if (!confirm('¿Cerrar sesión?')) return;
+            signOut(auth);
+        };
+
+        // ---------- SINCRONIZACIÓN EN TIEMPO REAL ----------
+        function upsertLocal(arr, obj) {
+            const ix = arr.findIndex(x => x.id === obj.id);
+            if (ix > -1) arr[ix] = obj; else arr.push(obj);
+        }
+        function removeLocal(arr, id) {
+            const ix = arr.findIndex(x => x.id === id);
+            if (ix > -1) arr.splice(ix, 1);
+        }
+
+        let listenersIniciados = false;
+        function iniciarListenersNube() {
+            if (listenersIniciados) return;
+            listenersIniciados = true;
+
+            onSnapshot(collection(db, 'usuarios'), (snap) => {
+                snap.docChanges().forEach(ch => {
+                    const id = Number(ch.doc.id);
+                    if (ch.type === 'removed') removeLocal(usuarios, id);
+                    else upsertLocal(usuarios, { ...ch.doc.data(), id });
+                });
+                localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
+                if (typeof renderizarUsuariosCaserio === 'function' && caserioSeleccionado) renderizarUsuariosCaserio();
+                setSyncText('🟢 Sincronizado');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+
+            onSnapshot(collection(db, 'recibos'), (snap) => {
+                snap.docChanges().forEach(ch => {
+                    const id = Number(ch.doc.id);
+                    if (ch.type === 'removed') removeLocal(recibos, id);
+                    else upsertLocal(recibos, { ...ch.doc.data(), id });
+                });
+                localStorage.setItem('agua_recibos', JSON.stringify(recibos));
+                if (typeof actualizarDashboard === 'function') actualizarDashboard();
+                if (typeof actualizarListaRecibosSiVisible === 'function') actualizarListaRecibosSiVisible();
+                setSyncText('🟢 Sincronizado');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+
+            onSnapshot(collection(db, 'contabilidad'), (snap) => {
+                snap.docChanges().forEach(ch => {
+                    const id = Number(ch.doc.id);
+                    if (ch.type === 'removed') removeLocal(contabilidad, id);
+                    else upsertLocal(contabilidad, { ...ch.doc.data(), id });
+                });
+                localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+                if (typeof actualizarResumenContable === 'function') actualizarResumenContable();
+                setSyncText('🟢 Sincronizado');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+        }
+
+        // ---------- ESCRITURA (app -> nube) ----------
+        window.syncUsuario = (u) => setDoc(doc(db, 'usuarios', String(u.id)), { ...u, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
+        window.eliminarUsuarioNube = (id) => deleteDoc(doc(db, 'usuarios', String(id))).catch(console.error);
+        window.syncRecibo = (r) => setDoc(doc(db, 'recibos', String(r.id)), { ...r, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
+        window.eliminarReciboNube = (id) => deleteDoc(doc(db, 'recibos', String(id))).catch(console.error);
+        window.syncContabilidad = (c) => setDoc(doc(db, 'contabilidad', String(c.id)), { ...c, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
+        window.eliminarContabilidadNube = (id) => deleteDoc(doc(db, 'contabilidad', String(id))).catch(console.error);
+        // Movimiento de caja generado por un pago de recibo de agua (colección compartida con caja.html)
+        window.syncMovimientoCaja = (m) => setDoc(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
+        window.eliminarMovimientoCajaNube = (id) => deleteDoc(doc(db, 'movimientos', String(id))).catch(console.error);
+
+        // Contador atómico de N° de recibo (evita duplicados con varios cajeros a la vez)
+        window.obtenerSiguienteNumeroRecibo = async function () {
+            // Si el dispositivo ya sabe que no tiene internet, ni lo intentamos: vamos directo al respaldo local.
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                throw new Error('offline');
+            }
+            const ref = doc(db, 'contadores', 'recibos');
+            const transaccion = runTransaction(db, async (tx) => {
+                const snap = await tx.get(ref);
+                const siguiente = (snap.exists() ? (snap.data().valor || 0) : 0) + 1;
+                tx.set(ref, { valor: siguiente }, { merge: true });
+                return siguiente;
+            });
+            // Límite de espera: si en 3 segundos no hay respuesta del servidor (señal débil/sin datos),
+            // se cae al contador local en vez de dejar al cajero esperando.
+            const limiteEspera = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+            return await Promise.race([transaccion, limiteEspera]);
+        };
+
+        // Sube un backup JSON antiguo (Google Sheets) completo a Firestore, en lotes de 450 documentos.
+        window.subirBackupANube = async function (usuariosArr, recibosArr, contabilidadArr) {
+            const ops = [];
+            usuariosArr.forEach(u => ops.push({ col: 'usuarios', id: String(u.id), data: u }));
+            recibosArr.forEach(r => ops.push({ col: 'recibos', id: String(r.id), data: r }));
+            contabilidadArr.forEach(c => ops.push({ col: 'contabilidad', id: String(c.id), data: c }));
+
+            const CHUNK = 450;
+            for (let i = 0; i < ops.length; i += CHUNK) {
+                const batch = writeBatch(db);
+                ops.slice(i, i + CHUNK).forEach(op => {
+                    batch.set(doc(db, op.col, op.id), { ...op.data, actualizadoEn: serverTimestamp() }, { merge: true });
+                });
+                await batch.commit();
+            }
+
+            // Deja el contador de recibos por delante del número más alto restaurado, para no duplicar futuros recibos.
+            const maxNumero = recibosArr.reduce((max, r) => {
+                const n = Number(r.numero);
+                return isNaN(n) ? max : Math.max(max, n);
+            }, 0);
+            if (maxNumero > 0) {
+                await setDoc(doc(db, 'contadores', 'recibos'), { valor: maxNumero }, { merge: true });
+            }
+        };
+
+        // Migración de un solo uso: convierte cada entrada de "contabilidad" (agua) en un movimiento de Caja Chica.
+        // Usa reciboId como id del movimiento -> es idempotente, no crea duplicados si se ejecuta más de una vez.
+        window.migrarContabilidadACaja = async function () {
+            if (!contabilidad || contabilidad.length === 0) { alert('No hay registros en Contabilidad para enviar.'); return; }
+            if (!confirm('¿Enviar ' + contabilidad.length + ' cobros de Contabilidad a Caja Chica como INGRESOS? No se duplican si ya se enviaron antes.')) return;
+
+            let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+            const batch = [];
+            let nuevos = 0;
+
+            contabilidad.forEach(c => {
+                const idMov = Number(c.reciboId);
+                if (!idMov) return;
+                if (movimientosCaja.some(m => m.id === idMov)) return; // ya estaba en caja localmente
+
+                const mov = {
+                    id: idMov,
+                    tipo: 'entrada',
+                    reciboId: idMov,
+                    fecha: c.fecha,
+                    hora: '00:00:00',
+                    timestamp: idMov,
+                    admin: 'Sistema de Agua (Migración)',
+                    concepto: 'Recaudación Agua: ' + c.cliente,
+                    recibe: 'Sistema de Agua',
+                    total: Number(c.monto) || 0,
+                    items: [{ desc: 'Pago Recibo Agua: ' + c.cliente, cant: 1, precio: Number(c.monto) || 0 }]
+                };
+                movimientosCaja.push(mov);
+                batch.push(mov);
+                nuevos++;
+            });
+
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+
+            const CHUNK = 450;
+            for (let i = 0; i < batch.length; i += CHUNK) {
+                const wb = writeBatch(db);
+                batch.slice(i, i + CHUNK).forEach(m => {
+                    wb.set(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true });
+                });
+                await wb.commit();
+            }
+
+            alert('✅ ' + nuevos + ' cobros enviados a Caja Chica.' + (nuevos < contabilidad.length ? ' (' + (contabilidad.length - nuevos) + ' ya estaban.)' : ''));
+        };
+
+        // ---------- ESTADO DE SESIÓN ----------
+        onAuthStateChanged(auth, (user) => {
+            const login = document.getElementById('login-screen');
+            const app = document.getElementById('app-content');
+            if (user) {
+                login.style.display = 'none';
+                app.style.display = 'block';
+                const infoEl = document.getElementById('sync-usuario-actual');
+                if (infoEl) infoEl.innerText = 'Sesión: ' + user.email;
+                iniciarListenersNube();
+            } else {
+                login.style.display = 'flex';
+                app.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('offline', () => setSyncText('📴 Sin conexión (guardando local)'));
+        window.addEventListener('online', () => setSyncText('🔄 Reconectando...'));
+
+        // ===== REGISTRO DEL SERVICE WORKER (PWA) =====
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registrado:', reg.scope))
+                    .catch(err => console.error('Error registrando Service Worker:', err));
+            });
+        }
+
+        // ===== IMPRESIÓN NATIVA CON EL SISTEMA DE WINDOWS =====
+        // Muestra el diálogo de impresión del sistema operativo (permite elegir
+        // impresora física o "Microsoft Print to PDF") en lugar de solo descargar el PDF.
+        function imprimirConSistema(elementId) {
+            return new Promise((resolve) => {
+                const finalizar = () => {
+                    window.onafterprint = null;
+                    resolve();
+                };
+                window.onafterprint = finalizar;
+                setTimeout(() => {
+                    window.print();
+                    setTimeout(finalizar, 800);
+                }, 150);
+            });
+        }
+    </script>
+</body>
+</html>
