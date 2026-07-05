@@ -18,6 +18,7 @@
     <link rel="apple-touch-icon" href="icons/icon-180.png">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
         /* ===== IMPRESIÓN NATIVA (SISTEMA WINDOWS) ===== */
         @media print {
@@ -206,6 +207,19 @@
         .ticket-header { text-align: center; border-bottom: 1px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
         .ticket-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
         .ticket-total { border-top: 1px dashed black; padding-top: 10px; margin-top: 10px; font-weight: bold; font-size: 16px; text-align: right; }
+        /* Punto indicador de estado de sincronización (cambia de color según el estado) */
+        .sync-dot {
+            display:inline-block; width:9px; height:9px; border-radius:50%;
+            margin-right:6px; vertical-align:middle;
+            background:#999; transition: background-color 0.3s ease;
+        }
+        .sync-dot.dot-connecting { background:#ffb300; animation: dotPulse 1s infinite ease-in-out; }
+        .sync-dot.dot-synced { background:#2e7d32; }
+        .sync-dot.dot-error { background:#c62828; }
+        .sync-dot.dot-offline { background:#78909c; }
+        @keyframes dotPulse { 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+        #lista-conectados { text-align:left; font-size:0.78rem; color:#444; margin-top:8px; }
+        #lista-conectados .conectado-item { display:flex; align-items:center; gap:6px; padding:3px 0; }
     </style>
 </head>
 <body>
@@ -229,33 +243,33 @@
 
 <!-- ===== MODAL: RECAUDACIÓN (Hoy / Mes / Total) ===== -->
 <div id="modal-recaudacion" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; align-items:center; justify-content:center; padding:15px;">
-    <div style="background:white; border-radius:16px; max-width:420px; width:100%; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:90vh; overflow-y:auto;">
-        <h3 style="margin:0 0 4px; text-align:center;">📊 Recaudación de Cobros</h3>
-        <p style="text-align:center; color:#888; font-size:0.78rem; margin:0 0 14px;">Basado en los recibos marcados como pagados</p>
+    <div style="background:white; border-radius:16px; max-width:640px; width:100%; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:94vh; overflow-y:auto;">
+        <h3 style="margin:0 0 4px; text-align:center; font-size:1.3rem;">📊 Recaudación de Cobros</h3>
+        <p style="text-align:center; color:#888; font-size:0.85rem; margin:0 0 16px;">Basado en los recibos marcados como pagados</p>
 
         <!-- KPIs rápidos, siempre globales -->
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:16px;">
-            <div style="background:#e8f5e9; border-radius:10px; padding:8px 6px; text-align:center;">
-                <div style="font-size:0.68rem; font-weight:700; color:#2e7d32;">HOY</div>
-                <div id="rec-hoy-monto" style="font-size:0.92rem; font-weight:800; color:#2e7d32;">$0.00</div>
-                <div id="rec-hoy-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:18px;">
+            <div style="background:#e8f5e9; border-radius:10px; padding:12px 8px; text-align:center;">
+                <div style="font-size:0.8rem; font-weight:700; color:#2e7d32;">HOY</div>
+                <div id="rec-hoy-monto" style="font-size:1.15rem; font-weight:800; color:#2e7d32;">$0.00</div>
+                <div id="rec-hoy-cantidad" style="font-size:0.72rem; color:#666;">0 rec.</div>
             </div>
-            <div style="background:#e3f2fd; border-radius:10px; padding:8px 6px; text-align:center;">
-                <div style="font-size:0.68rem; font-weight:700; color:#1565c0;">MES</div>
-                <div id="rec-mes-monto" style="font-size:0.92rem; font-weight:800; color:#1565c0;">$0.00</div>
-                <div id="rec-mes-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+            <div style="background:#e3f2fd; border-radius:10px; padding:12px 8px; text-align:center;">
+                <div style="font-size:0.8rem; font-weight:700; color:#1565c0;">MES</div>
+                <div id="rec-mes-monto" style="font-size:1.15rem; font-weight:800; color:#1565c0;">$0.00</div>
+                <div id="rec-mes-cantidad" style="font-size:0.72rem; color:#666;">0 rec.</div>
             </div>
-            <div style="background:#fff3e0; border-radius:10px; padding:8px 6px; text-align:center;">
-                <div style="font-size:0.68rem; font-weight:700; color:#ef6c00;">TOTAL</div>
-                <div id="rec-total-monto" style="font-size:0.92rem; font-weight:800; color:#ef6c00;">$0.00</div>
-                <div id="rec-total-cantidad" style="font-size:0.62rem; color:#666;">0 rec.</div>
+            <div style="background:#fff3e0; border-radius:10px; padding:12px 8px; text-align:center;">
+                <div style="font-size:0.8rem; font-weight:700; color:#ef6c00;">TOTAL</div>
+                <div id="rec-total-monto" style="font-size:1.15rem; font-weight:800; color:#ef6c00;">$0.00</div>
+                <div id="rec-total-cantidad" style="font-size:0.72rem; color:#666;">0 rec.</div>
             </div>
         </div>
 
-        <hr style="border:none; border-top:1px solid #eee; margin:0 0 14px;">
+        <hr style="border:none; border-top:1px solid #eee; margin:0 0 16px;">
 
-        <label style="font-size:0.8rem;">Ver por periodo</label>
-        <select id="rec-modo-periodo" onchange="cambiarModoPeriodoRecaudacion()" style="margin-bottom:8px;">
+        <label style="font-size:0.9rem;">Ver por periodo</label>
+        <select id="rec-modo-periodo" onchange="cambiarModoPeriodoRecaudacion()" style="margin-bottom:10px;">
             <option value="hoy">Hoy</option>
             <option value="mes">Este mes</option>
             <option value="anio">Este año</option>
@@ -264,12 +278,12 @@
             <option value="aniox">📆 Elegir un año</option>
             <option value="todo">Todo el tiempo</option>
         </select>
-        <input type="date" id="rec-input-dia" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
-        <input type="month" id="rec-input-mes" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
-        <input type="number" id="rec-input-anio" placeholder="Ej. 2026" style="display:none; margin-bottom:8px;" onchange="actualizarRecaudacion()">
+        <input type="date" id="rec-input-dia" style="display:none; margin-bottom:10px;" onchange="actualizarRecaudacion()">
+        <input type="month" id="rec-input-mes" style="display:none; margin-bottom:10px;" onchange="actualizarRecaudacion()">
+        <input type="number" id="rec-input-anio" placeholder="Ej. 2026" style="display:none; margin-bottom:10px;" onchange="actualizarRecaudacion()">
 
-        <label style="font-size:0.8rem;">Caserío</label>
-        <select id="rec-filtro-caserio" onchange="actualizarRecaudacion()" style="margin-bottom:14px;">
+        <label style="font-size:0.9rem;">Caserío</label>
+        <select id="rec-filtro-caserio" onchange="actualizarRecaudacion()" style="margin-bottom:16px;">
             <option value="todos">Todos los caseríos</option>
             <option value="Los Planes">Los Planes</option>
             <option value="Piletas">Piletas</option>
@@ -277,18 +291,27 @@
             <option value="Venecia">Venecia</option>
         </select>
 
-        <div style="background:#f3f4f6; border-radius:12px; padding:12px 14px; margin-bottom:14px; text-align:center;">
-            <div id="rec-periodo-label" style="font-size:0.78rem; color:#555;">Recaudado hoy</div>
-            <div id="rec-periodo-monto" style="font-size:1.5rem; font-weight:800; color:#111;">$0.00</div>
-            <div id="rec-periodo-cantidad" style="font-size:0.75rem; color:#777;">0 recibos</div>
+        <div style="background:#f3f4f6; border-radius:12px; padding:14px 16px; margin-bottom:16px; text-align:center;">
+            <div id="rec-periodo-label" style="font-size:0.88rem; color:#555;">Recaudado hoy</div>
+            <div id="rec-periodo-monto" style="font-size:1.9rem; font-weight:800; color:#111;">$0.00</div>
+            <div id="rec-periodo-cantidad" style="font-size:0.85rem; color:#777;">0 recibos</div>
         </div>
 
         <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <button type="button" id="tab-btn-pagados" class="btn-bt" onclick="mostrarTabRecaudacion('pagados')" style="margin:0; flex:1; background:#2e7d32;">✅ Pagados</button>
-            <button type="button" id="tab-btn-deben" class="btn-bt" onclick="mostrarTabRecaudacion('deben')" style="margin:0; flex:1; background:#c62828; opacity:0.55;">⏳ Deben</button>
+            <button type="button" id="tab-btn-pagados" class="btn-bt" onclick="mostrarTabRecaudacion('pagados')" style="margin:0; flex:1; background:#2e7d32; font-size:0.95rem; padding:12px;">✅ Pagados</button>
+            <button type="button" id="tab-btn-deben" class="btn-bt" onclick="mostrarTabRecaudacion('deben')" style="margin:0; flex:1; background:#c62828; opacity:0.55; font-size:0.95rem; padding:12px;">⏳ Deben</button>
         </div>
 
-        <div id="rec-lista-contenedor" style="background:white; border:1px solid #eee; border-radius:10px; max-height:220px; overflow-y:auto;"></div>
+        <div id="rec-lista-contenedor" style="background:white; border:1px solid #eee; border-radius:10px; max-height:320px; overflow-y:auto; font-size:0.95rem;"></div>
+
+        <div style="margin-top:16px;">
+            <label style="font-size:0.9rem;">🖨️ Imprimir listado (PDF)</label>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('pagados')" style="margin:0; flex:1; min-width:100px; background:#2e7d32; font-size:0.82rem; padding:10px 6px;">✅ Pagados</button>
+                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('deben')" style="margin:0; flex:1; min-width:100px; background:#c62828; font-size:0.82rem; padding:10px 6px;">⏳ Deben</button>
+                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('general')" style="margin:0; flex:1; min-width:100px; background:#0288d1; font-size:0.82rem; padding:10px 6px;">📋 General</button>
+            </div>
+        </div>
 
         <button type="button" class="btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:14px;">Cerrar</button>
     </div>
@@ -304,7 +327,9 @@
     <button id="btn-ir-menu" class="btn-nav-flotante" onclick="irMenuPrincipal()" title="Menú principal">🏠</button>
     <h1>💧 ACOMAACAP</h1>
     <p>Sistema de facturación de Agua | Cantón Las Piletas</p>
-    <p id="sync-status" style="font-size:0.75rem; margin-top:4px; opacity:0.85;">🔄 Conectando...</p>
+    <p style="font-size:0.75rem; margin-top:4px; opacity:0.9;">
+        <span id="sync-dot" class="sync-dot dot-connecting"></span><span id="sync-status">Conectando...</span>
+    </p>
 </header>
 
 <div class="container">
@@ -403,15 +428,17 @@
 
     <div id="buscador-global" class="section">
         <h2>🔍 Buscador General</h2>
-        <div class="card">
-            <label>Nombre del Cliente o Contador</label>
-            <input type="text" id="input-buscador-global" placeholder="Escribe para buscar..." onkeyup="ejecutarBusquedaGlobal()" autofocus>
-            <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.8rem;">Resultados en tiempo real</p>
+        <div id="buscador-global-wrap-general">
+            <div class="card">
+                <label>Nombre del Cliente o Contador</label>
+                <input type="text" id="input-buscador-global" placeholder="Escribe para buscar..." onkeyup="ejecutarBusquedaGlobal()" autofocus>
+                <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.8rem;">Resultados en tiempo real</p>
+            </div>
+
+            <div id="resultados-globales"></div>
+
+            <div style="margin: 25px 0 15px; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
         </div>
-
-        <div id="resultados-globales"></div>
-
-        <div style="margin: 25px 0 15px; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
 
         <div id="busqueda-vista-caserios" class="grid-caserios">
             <div class="btn-caserio c-planes" onclick="abrirCaserioBusqueda('Los Planes')">
@@ -435,6 +462,7 @@
         <div id="busqueda-vista-nombres" style="display:none;">
             <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
             <h4 id="busqueda-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+            <input type="text" id="input-search-busqueda-caserio" placeholder="Buscar por nombre..." style="margin-bottom:15px;" onkeyup="renderizarNombresBusqueda()">
             <div id="busqueda-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
         </div>
     </div>
@@ -523,17 +551,19 @@
             </div>
         </div>
 
-        <label>Buscar Cliente por Nombre o Contador</label>
-        <input type="text" id="input-f-usuario-search"
-               placeholder="Escribe el nombre o el N° de contador"
-               onkeyup="filtrarUsuariosFactura()">
+        <div id="factura-buscador-global-wrap">
+            <label>Buscar Cliente por Nombre o Contador</label>
+            <input type="text" id="input-f-usuario-search"
+                   placeholder="Escribe el nombre o el N° de contador"
+                   onkeyup="filtrarUsuariosFactura()">
 
-        <div id="f-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
-            <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+            <div id="f-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
+                <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+            </div>
         </div>
 
         <div id="factura-caserio-browser">
-            <div style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
+            <div id="factura-separador-caserio" style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
 
             <div id="factura-vista-caserios" class="grid-caserios" style="margin-bottom:20px;">
                 <div class="btn-caserio c-planes" onclick="abrirCaserioFactura('Los Planes')">
@@ -557,6 +587,7 @@
             <div id="factura-vista-nombres" style="display:none; margin-bottom:20px;">
                 <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
                 <h4 id="factura-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+                <input type="text" id="input-search-factura-caserio" placeholder="Buscar por nombre..." style="margin-bottom:15px;" onkeyup="renderizarNombresFactura()">
                 <div id="factura-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
             </div>
         </div>
@@ -606,18 +637,20 @@
             <a href="javascript:void(0)" onclick="cambiarPasswordCobrar()" style="font-size:0.78rem; color:#888; text-decoration:underline;">🔑 Cambiar contraseña de acceso a Cobrar</a>
         </p>
 
-        <label>Buscar Cliente por Nombre o Contador</label>
-        <input type="text" id="input-c-usuario-search"
-               placeholder="Escribe el nombre o el N° de contador"
-               onkeyup="filtrarUsuariosCobrar()">
+        <div id="cobrar-buscador-global-wrap">
+            <label>Buscar Cliente por Nombre o Contador</label>
+            <input type="text" id="input-c-usuario-search"
+                   placeholder="Escribe el nombre o el N° de contador"
+                   onkeyup="filtrarUsuariosCobrar()">
 
-        <div id="c-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
-            <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+            <div id="c-usuario-resultados" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin-top: -15px; margin-bottom: 20px; background: #fff; box-shadow: 0 4px 5px rgba(0,0,0,0.05);">
+                <p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>
+            </div>
+
+            <div id="cobrar-separador-caserio" style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
         </div>
 
         <div id="cobrar-caserio-browser">
-            <div style="margin: 15px 0; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
-
             <div id="cobrar-vista-caserios" class="grid-caserios" style="margin-bottom:20px;">
                 <div class="btn-caserio c-planes" onclick="abrirCaserioCobrar('Los Planes')">
                     <div class="icon">🏡</div>
@@ -640,6 +673,7 @@
             <div id="cobrar-vista-nombres" style="display:none; margin-bottom:20px;">
                 <button class="btn-outline" onclick="irAtras()" style="width:auto; margin-bottom:10px; border:none; padding-left:0;">← Volver a Caseríos</button>
                 <h4 id="cobrar-titulo-caserio" style="text-align:center; margin:0 0 15px;"></h4>
+                <input type="text" id="input-search-cobrar-caserio" placeholder="Buscar por nombre..." style="margin-bottom:15px;" onkeyup="renderizarNombresCobrar()">
                 <div id="cobrar-lista-nombres" style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);"></div>
             </div>
         </div>
@@ -649,9 +683,12 @@
         <input type="hidden" id="c-usuario-id">
 
         <div id="cobrar-info-cliente" style="display:none;">
-            <div style="background: #e1f5fe; padding: 15px; border-radius: 12px; margin-bottom: 20px; display:flex; justify-content:space-between; font-size:0.9rem;">
-                <span>Contador: <strong id="c-display-contador">---</strong></span>
-                <span>Ubicación: <strong id="c-display-dir">---</strong></span>
+            <div style="background: #e1f5fe; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                <div style="font-size:1.05rem; font-weight:700; margin-bottom:8px;" id="c-display-nombre">---</div>
+                <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                    <span>Contador: <strong id="c-display-contador">---</strong></span>
+                    <span>Ubicación: <strong id="c-display-dir">---</strong></span>
+                </div>
             </div>
             <div id="cobrar-lista-pendientes"></div>
         </div>
@@ -800,11 +837,14 @@
         <div style="margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px;">
             <h3 style="text-align:center;">☁️ Sincronización en la Nube</h3>
             <div class="card card-blue" style="text-align:center;">
-                <p id="sync-status-detalle" style="margin:0; font-weight:700;">🔄 Conectando...</p>
+                <p style="margin:0; font-weight:700;">
+                    <span id="sync-dot-detalle" class="sync-dot dot-connecting"></span><span id="sync-status-detalle">Conectando...</span>
+                </p>
                 <p style="margin:8px 0 0; font-size:0.8rem; color:#666;">
                     Los datos se guardan automáticamente en la nube en tiempo real. Ya no necesitas subir ni bajar copias manualmente entre celulares.
                 </p>
                 <p id="sync-usuario-actual" style="margin:10px 0 0; font-size:0.8rem; color:#666;"></p>
+                <div id="lista-conectados">👥 Buscando usuarios conectados...</div>
                 <button class="btn btn-outline" style="margin-top:12px;" onclick="cerrarSesion()">🔒 Cerrar sesión</button>
             </div>
             <div class="card card-green" style="text-align:center; margin-top:15px;">
@@ -867,6 +907,23 @@
 
         // NUEVO: Contador de recibos, inicia en 0 si no existe.
         let lastReciboNum = parseInt(localStorage.getItem('agua_last_recibo_num')) || 0;
+
+        // Respaldo SIN INTERNET para el N° correlativo de recibo.
+        // En vez de confiar solo en un contador guardado aparte (que podía quedar desactualizado
+        // si este celular no había generado el último recibo), busca en la base de datos LOCAL
+        // (los recibos ya sincronizados/guardados en este dispositivo) cuál es el número más alto
+        // que existe, y continúa desde ahí. Así, aunque cambie de celular o pase tiempo sin usar
+        // este dispositivo, el correlativo no retrocede ni se repite.
+        function obtenerSiguienteNumeroLocal() {
+            const maxEnBaseLocal = recibos.reduce((max, r) => {
+                const n = Number(r.numero);
+                return isNaN(n) ? max : Math.max(max, n);
+            }, 0);
+            const siguiente = Math.max(maxEnBaseLocal, lastReciboNum) + 1;
+            lastReciboNum = siguiente;
+            localStorage.setItem('agua_last_recibo_num', lastReciboNum);
+            return siguiente;
+        }
 
         // VARIABLES DE ESTADO
         let reciboEditandoId = null;
@@ -1062,6 +1119,7 @@
                 document.getElementById('input-buscador-global').value = '';
                 document.getElementById('resultados-globales').innerHTML = '';
                 ejecutarBusquedaGlobal();
+                volverCaseriosBusqueda();
             }
 
             // Lógica específica al entrar a cada sección
@@ -1365,7 +1423,9 @@
             caserioFacturaSeleccionado = nombre;
             document.getElementById('factura-vista-caserios').style.display = 'none';
             document.getElementById('factura-vista-nombres').style.display = 'block';
+            document.getElementById('factura-buscador-global-wrap').style.display = 'none';
             document.getElementById('factura-titulo-caserio').innerText = nombre;
+            document.getElementById('input-search-factura-caserio').value = '';
             renderizarNombresFactura();
         }
 
@@ -1434,12 +1494,17 @@
             caserioFacturaSeleccionado = null;
             document.getElementById('factura-vista-caserios').style.display = 'grid';
             document.getElementById('factura-vista-nombres').style.display = 'none';
+            document.getElementById('factura-buscador-global-wrap').style.display = 'block';
+            document.getElementById('input-f-usuario-search').value = '';
+            document.getElementById('f-usuario-resultados').innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
         }
 
         function renderizarNombresFactura() {
             const div = document.getElementById('factura-lista-nombres');
+            const filtro = (document.getElementById('input-search-factura-caserio').value || '').toLowerCase();
             const lista = usuarios
                 .filter(u => u.direccion === caserioFacturaSeleccionado)
+                .filter(u => !filtro || u.nombre.toLowerCase().includes(filtro))
                 .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
             if (lista.length === 0) {
@@ -1576,7 +1641,9 @@
             caserioCobrarSeleccionado = nombre;
             document.getElementById('cobrar-vista-caserios').style.display = 'none';
             document.getElementById('cobrar-vista-nombres').style.display = 'block';
+            document.getElementById('cobrar-buscador-global-wrap').style.display = 'none';
             document.getElementById('cobrar-titulo-caserio').innerText = nombre;
+            document.getElementById('input-search-cobrar-caserio').value = '';
             renderizarNombresCobrar();
         }
 
@@ -1584,12 +1651,17 @@
             caserioCobrarSeleccionado = null;
             document.getElementById('cobrar-vista-caserios').style.display = 'grid';
             document.getElementById('cobrar-vista-nombres').style.display = 'none';
+            document.getElementById('cobrar-buscador-global-wrap').style.display = 'block';
+            document.getElementById('input-c-usuario-search').value = '';
+            document.getElementById('c-usuario-resultados').innerHTML = '<p style="padding:10px; text-align:center; color:#999; margin:0;">Inicie escribiendo para buscar.</p>';
         }
 
         function renderizarNombresCobrar() {
             const div = document.getElementById('cobrar-lista-nombres');
+            const filtro = (document.getElementById('input-search-cobrar-caserio').value || '').toLowerCase();
             const lista = usuarios
                 .filter(u => u.direccion === caserioCobrarSeleccionado)
+                .filter(u => !filtro || u.nombre.toLowerCase().includes(filtro))
                 .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
             if (lista.length === 0) {
@@ -1616,6 +1688,8 @@
         // Suma lo efectivamente cobrado (recibos con estado 'pagado'), usando la
         // fecha en que se marcaron como pagados (fechaPago), no la fecha de emisión.
         let recTabActiva = 'pagados';
+        let recListaPagadosActual = [];
+        let recListaDebenActual = [];
 
         function cambiarModoPeriodoRecaudacion() {
             const modo = document.getElementById('rec-modo-periodo').value;
@@ -1759,6 +1833,9 @@
             document.getElementById('tab-btn-pagados').innerText = `✅ Pagados (${listaPagadosFiltrada.length})`;
             document.getElementById('tab-btn-deben').innerText = `⏳ Deben (${pendientes.length})`;
 
+            recListaPagadosActual = listaPagadosFiltrada;
+            recListaDebenActual = pendientes;
+
             renderizarListaRecaudacion(recTabActiva === 'pagados' ? listaPagadosFiltrada : pendientes, recTabActiva);
         }
 
@@ -1785,6 +1862,71 @@
                     <div style="font-weight:800; color:${colorMonto};">$${monto.toFixed(2)}</div>
                 </div>`;
             }).join('');
+        }
+
+        function generarPDFRecaudacion(tipo) {
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+                const periodo = etiquetaPeriodoSeleccionado();
+                const caserio = document.getElementById('rec-filtro-caserio').value;
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('ACOMAACAP - Recaudación de Cobros', 14, 15);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`${periodo}  |  Caserío: ${caserio}`, 14, 22);
+
+                const filasPagados = recListaPagadosActual.map(r => [
+                    r.nombre || '', r.direccion || '', r.fechaPago || r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
+                ]);
+                const filasDeben = recListaDebenActual.map(r => [
+                    r.nombre || '', r.direccion || '', r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
+                ]);
+
+                let startY = 28;
+                const totalPagados = recListaPagadosActual.reduce((a, r) => a + totalRecibo(r), 0);
+                const totalDeben = recListaDebenActual.reduce((a, r) => a + totalRecibo(r), 0);
+
+                if (tipo === 'pagados' || tipo === 'general') {
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+                    doc.text(`Pagados (${recListaPagadosActual.length}) - Total: $${totalPagados.toFixed(2)}`, 14, startY);
+                    doc.autoTable({
+                        startY: startY + 3,
+                        head: [['Cliente', 'Caserío', 'Fecha de pago', 'Monto']],
+                        body: filasPagados.length ? filasPagados : [['—', '—', '—', '—']],
+                        styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [46, 125, 50] },
+                        margin: { left: 14, right: 14 }
+                    });
+                    startY = doc.lastAutoTable.finalY + 10;
+                }
+
+                if (tipo === 'deben' || tipo === 'general') {
+                    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+                    doc.text(`Deben (${recListaDebenActual.length}) - Total: $${totalDeben.toFixed(2)}`, 14, startY);
+                    doc.autoTable({
+                        startY: startY + 3,
+                        head: [['Cliente', 'Caserío', 'Pendiente desde', 'Monto']],
+                        body: filasDeben.length ? filasDeben : [['—', '—', '—', '—']],
+                        styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [198, 40, 40] },
+                        margin: { left: 14, right: 14 }
+                    });
+                }
+
+                const nombreTipo = { pagados: 'Pagados', deben: 'Deben', general: 'General' }[tipo];
+                const filename = `Recaudacion_${nombreTipo}_${Date.now()}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando el PDF de recaudación:', e);
+                alert('⚠️ No se pudo generar el PDF: ' + e.message);
+            }
         }
 
         // ================= MÓDULO "TRABAJO DE CALLE" =================
@@ -1831,7 +1973,7 @@
                 <div style="padding:14px 16px; border-bottom:1px solid #eee;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
                         <span style="font-weight:600;">${u.nombre}${totalPend > 0 ? ' <small style="color:#e65100; font-weight:700;">($' + totalPend.toFixed(2) + ' pend.)</small>' : ''}</span>
-                        <button class="btn" style="padding:6px 12px; font-size:0.8rem; background:#e65100; color:white; margin:0; white-space:nowrap;" onclick="agregarCargoCalle(${u.id})">➕ Cargo</button>
+                        <button class="btn" style="width:auto; padding:8px 14px; font-size:0.8rem; background:#e65100; color:white; margin:0; white-space:nowrap; flex-shrink:0;" onclick="agregarCargoCalle(${u.id})">➕ Cargo</button>
                     </div>
                     ${tags ? '<div style="margin-top:6px;">' + tags + '</div>' : ''}
                 </div>`;
@@ -1942,6 +2084,7 @@
             document.getElementById('btn-cambiar-cliente-cobrar').style.display = 'block';
             document.getElementById('cobrar-info-cliente').style.display = 'block';
 
+            document.getElementById('c-display-nombre').innerText = u.nombre;
             document.getElementById('c-display-contador').innerText = u.contador;
             document.getElementById('c-display-dir').innerText = u.direccion || '';
 
@@ -1982,7 +2125,7 @@
                     ${detalleItems}
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
                         <span style="font-size:1.4rem; font-weight:800; color:var(--danger);">$${totalR.toFixed(2)}</span>
-                        <button class="btn btn-primary" style="margin:0; padding:10px 18px; font-size:0.9rem;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar</button>
+                        <button class="btn btn-primary" style="width:auto; margin:0; padding:10px 18px; font-size:0.9rem; flex-shrink:0;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar</button>
                     </div>
                 </div>`;
                 return;
@@ -2000,7 +2143,7 @@
                         <div style="font-size:0.75rem; color:#888;">TOTAL A PAGAR</div>
                         <span style="font-size:1.5rem; font-weight:800; color:var(--danger);">$${totalGeneral.toFixed(2)}</span>
                     </div>
-                    <button class="btn btn-primary" style="margin:0; padding:12px 20px; font-size:0.95rem;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar Todo</button>
+                    <button class="btn btn-primary" style="width:auto; margin:0; padding:12px 20px; font-size:0.95rem; flex-shrink:0;" onclick="cobrarTodosPendientes(${id})">💰 Cobrar Todo</button>
                 </div>
             </div>`;
         }
@@ -2067,11 +2210,9 @@
                 // Lógica de CREACIÓN: número atómico desde Firestore (evita duplicados con varios cajeros a la vez).
                 if (typeof obtenerSiguienteNumeroRecibo === 'function') {
                     try { receiptNum = await obtenerSiguienteNumeroRecibo(); }
-                    catch(e) { console.error(e); lastReciboNum = lastReciboNum + 1; localStorage.setItem('agua_last_recibo_num', lastReciboNum); receiptNum = lastReciboNum; }
+                    catch(e) { console.error(e); receiptNum = obtenerSiguienteNumeroLocal(); }
                 } else {
-                    lastReciboNum = lastReciboNum + 1;
-                    localStorage.setItem('agua_last_recibo_num', lastReciboNum);
-                    receiptNum = lastReciboNum;
+                    receiptNum = obtenerSiguienteNumeroLocal();
                 }
             } else {
                 // Lógica de EDICIÓN: Buscamos el recibo original para mantener su número.
@@ -2982,25 +3123,11 @@
             }
 
             encontrados.forEach(u => {
-                const deuda = recibos.filter(r => r.usuarioId == u.id && r.estado === 'pendiente')
-                                     .reduce((acc, r) => acc + totalRecibo(r), 0);
-
-                const estadoHtml = deuda > 0
-                    ? `<span style="color:var(--danger); font-weight:bold;">⚠️ Debe $${deuda.toFixed(2)}</span>`
-                    : `<span style="color:var(--secondary); font-weight:bold;">✅ Al día</span>`;
-
-                // ⚠️ La clave es el "true" en el onclick:
                 div.innerHTML += `
-                <div class="list-item" onclick="mostrarPerfilUsuario(${u.id}, true)" style="cursor:pointer; padding:15px;">
+                <div class="list-item" onclick="seleccionarDesdeBusqueda(${u.id})" style="cursor:pointer; padding:15px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <strong style="font-size:1.1rem;">${u.nombre}</strong><br>
-                            <small style="color:#666;">${u.direccion} | #${u.contador}</small>
-                        </div>
-                        <div style="text-align:right;">
-                            ${estadoHtml}<br>
-                            <small style="color:#0288d1; font-size:0.8rem;">Ver Detalle</small>
-                        </div>
+                        <strong style="font-size:1.1rem;">${u.nombre}</strong>
+                        <small style="color:#0288d1; font-size:0.8rem;">🧾 Facturar</small>
                     </div>
                 </div>`;
             });
@@ -3014,7 +3141,9 @@
             caserioBusquedaSeleccionado = nombre;
             document.getElementById('busqueda-vista-caserios').style.display = 'none';
             document.getElementById('busqueda-vista-nombres').style.display = 'block';
+            document.getElementById('buscador-global-wrap-general').style.display = 'none';
             document.getElementById('busqueda-titulo-caserio').innerText = nombre;
+            document.getElementById('input-search-busqueda-caserio').value = '';
             renderizarNombresBusqueda();
         }
 
@@ -3022,12 +3151,17 @@
             caserioBusquedaSeleccionado = null;
             document.getElementById('busqueda-vista-caserios').style.display = 'grid';
             document.getElementById('busqueda-vista-nombres').style.display = 'none';
+            document.getElementById('buscador-global-wrap-general').style.display = 'block';
+            document.getElementById('input-buscador-global').value = '';
+            document.getElementById('resultados-globales').innerHTML = '';
         }
 
         function renderizarNombresBusqueda() {
             const div = document.getElementById('busqueda-lista-nombres');
+            const filtro = (document.getElementById('input-search-busqueda-caserio').value || '').toLowerCase();
             const lista = usuarios
                 .filter(u => u.direccion === caserioBusquedaSeleccionado)
+                .filter(u => !filtro || u.nombre.toLowerCase().includes(filtro))
                 .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
             if (lista.length === 0) {
@@ -3082,12 +3216,41 @@
             localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
         });
 
-        function setSyncText(txt) {
+        // estado: 'connecting' (amarillo, parpadeando) | 'synced' (verde) | 'error' (rojo) | 'offline' (gris)
+        function setSyncText(txt, estado) {
             const a = document.getElementById('sync-status');
             const b = document.getElementById('sync-status-detalle');
+            const dotA = document.getElementById('sync-dot');
+            const dotB = document.getElementById('sync-dot-detalle');
             if (a) a.innerText = txt;
             if (b) b.innerText = txt;
+            if (estado) {
+                [dotA, dotB].forEach(dot => {
+                    if (!dot) return;
+                    dot.classList.remove('dot-connecting', 'dot-synced', 'dot-error', 'dot-offline');
+                    dot.classList.add('dot-' + estado);
+                });
+            }
         }
+
+        // Si la app se abre ya sin conexión (no es un evento "offline" durante el uso,
+        // sino que ya estaba sin internet al cargar), lo reflejamos de inmediato en vez
+        // de dejar el punto en "Conectando..." para siempre.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            setSyncText('📴 Sin conexión (modo local)', 'offline');
+        }
+
+        // "Vigilante" de arranque: si tras 6 segundos seguimos sin resolver sesión
+        // (pantalla de login visible) y no hay internet, avisamos que puede deberse
+        // a falta de conexión, para que no parezca que la app está trabada.
+        setTimeout(() => {
+            const loginVisible = document.getElementById('login-screen') && document.getElementById('login-screen').style.display !== 'none';
+            const errBox = document.getElementById('login-error');
+            if (loginVisible && typeof navigator !== 'undefined' && navigator.onLine === false && errBox && errBox.style.display !== 'block') {
+                errBox.innerText = '📴 Sin conexión. Si ya iniciaste sesión antes en este celular, revisa tu señal/WiFi e intenta de nuevo.';
+                errBox.style.display = 'block';
+            }
+        }, 6000);
 
         // ---------- LOGIN ----------
         window.iniciarSesion = function () {
@@ -3105,6 +3268,8 @@
 
         window.cerrarSesion = function () {
             if (!confirm('¿Cerrar sesión?')) return;
+            if (intervaloLatido) { clearInterval(intervaloLatido); intervaloLatido = null; }
+            deleteDoc(doc(db, 'presencia', idDispositivo())).catch(() => {});
             signOut(auth);
         };
 
@@ -3131,8 +3296,8 @@
                 });
                 localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
                 if (typeof renderizarUsuariosCaserio === 'function' && caserioSeleccionado) renderizarUsuariosCaserio();
-                setSyncText('🟢 Sincronizado');
-            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+                setSyncText('🟢 Sincronizado', 'synced');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
             onSnapshot(collection(db, 'recibos'), (snap) => {
                 snap.docChanges().forEach(ch => {
@@ -3143,8 +3308,8 @@
                 localStorage.setItem('agua_recibos', JSON.stringify(recibos));
                 if (typeof actualizarDashboard === 'function') actualizarDashboard();
                 if (typeof actualizarListaRecibosSiVisible === 'function') actualizarListaRecibosSiVisible();
-                setSyncText('🟢 Sincronizado');
-            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+                setSyncText('🟢 Sincronizado', 'synced');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
             onSnapshot(collection(db, 'contabilidad'), (snap) => {
                 snap.docChanges().forEach(ch => {
@@ -3154,8 +3319,61 @@
                 });
                 localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
                 if (typeof actualizarResumenContable === 'function') actualizarResumenContable();
-                setSyncText('🟢 Sincronizado');
-            }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+                setSyncText('🟢 Sincronizado', 'synced');
+            }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
+
+            iniciarPresencia();
+        }
+
+        // ---------- PRESENCIA: quién está conectado ahora mismo ----------
+        // Cada dispositivo escribe un "latido" (heartbeat) en la colección 'presencia'.
+        // Se considera "conectado" a cualquier usuario cuyo último latido fue hace menos de 2 minutos.
+        const MINUTOS_ACTIVO = 2;
+        let presenciaListenerIniciado = false;
+        let intervaloLatido = null;
+
+        function idDispositivo() {
+            let id = localStorage.getItem('agua_dispositivo_id');
+            if (!id) { id = 'disp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); localStorage.setItem('agua_dispositivo_id', id); }
+            return id;
+        }
+
+        async function enviarLatidoPresencia() {
+            const user = auth.currentUser;
+            if (!user) return;
+            try {
+                await setDoc(doc(db, 'presencia', idDispositivo()), {
+                    email: user.email,
+                    ultimaConexion: serverTimestamp()
+                }, { merge: true });
+            } catch (e) { /* Sin internet: no pasa nada, se reintenta en el próximo latido. */ }
+        }
+
+        function renderizarListaConectados(snap) {
+            const cont = document.getElementById('lista-conectados');
+            if (!cont) return;
+            const ahora = Date.now();
+            const activos = [];
+            snap.forEach(d => {
+                const data = d.data();
+                const ts = data.ultimaConexion && data.ultimaConexion.toMillis ? data.ultimaConexion.toMillis() : 0;
+                if (ts && (ahora - ts) / 60000 <= MINUTOS_ACTIVO) activos.push(data.email || '(desconocido)');
+            });
+            if (activos.length === 0) {
+                cont.innerHTML = '👥 Nadie más conectado en este momento.';
+                return;
+            }
+            cont.innerHTML = '👥 <b>Conectados ahora (' + activos.length + ')</b><br>' +
+                activos.map(e => '<div class="conectado-item"><span class="sync-dot dot-synced" style="margin:0;"></span>' + e + '</div>').join('');
+        }
+
+        function iniciarPresencia() {
+            enviarLatidoPresencia();
+            if (!intervaloLatido) intervaloLatido = setInterval(enviarLatidoPresencia, 45000);
+            if (presenciaListenerIniciado) return;
+            presenciaListenerIniciado = true;
+            onSnapshot(collection(db, 'presencia'), (snap) => renderizarListaConectados(snap),
+                err => { console.error(err); });
         }
 
         // ---------- ESCRITURA (app -> nube) ----------
@@ -3277,8 +3495,8 @@
             }
         });
 
-        window.addEventListener('offline', () => setSyncText('📴 Sin conexión (guardando local)'));
-        window.addEventListener('online', () => setSyncText('🔄 Reconectando...'));
+        window.addEventListener('offline', () => setSyncText('📴 Sin conexión (guardando local)', 'offline'));
+        window.addEventListener('online', () => setSyncText('🔄 Reconectando...', 'connecting'));
 
         // ===== REGISTRO DEL SERVICE WORKER (PWA) =====
         if ('serviceWorker' in navigator) {
