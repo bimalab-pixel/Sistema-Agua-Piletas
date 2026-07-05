@@ -17,7 +17,8 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-180.png">
 
-    <script src="html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
         /* ===== IMPRESIÓN NATIVA (SISTEMA WINDOWS) ===== */
         @media print {
@@ -991,8 +992,6 @@ function borrarTodo() {
 
         // --- FUNCIÓN DE REPORTE PDF ACTUALIZADA ---
         function generarReportePDF(tipoReporte) {
-            if (typeof html2pdf === 'undefined') return alert("⚠️ Error librería PDF. Conéctese a internet.");
-
             // ... (Tu lógica de filtrado se mantiene igual) ...
             const fAnio = document.getElementById('filtro-anio').value; const fMes = document.getElementById('filtro-mes').value; const fDia = document.getElementById('filtro-dia').value;
             let movs = [...movimientos].sort((a, b) => a.timestamp - b.timestamp);
@@ -1000,38 +999,56 @@ function borrarTodo() {
             movs = movs.filter(m=>{ const d=new Date(m.timestamp); if(tipoReporte==='anual')return d.getFullYear()==aS; if(tipoReporte==='mensual')return d.getFullYear()==aS&&d.getMonth()==mS; if(tipoReporte==='diario')return d.getFullYear()==aS&&d.getMonth()==mS&&d.getDate()==dS; return false; });
             if(movs.length===0) return alert("❌ No hay datos para el reporte.");
 
-            // Generar tabla HTML...
-            let htmlRows = ''; let tIn=0, tOut=0;
-            movs.forEach(m => {
-                const esIn = m.tipo === 'entrada'; if(esIn)tIn+=m.total; else tOut+=m.total;
-                htmlRows += `<tr><td style="border:1px solid #eee;padding:6px;">${m.fecha} ${m.hora}</td><td style="border:1px solid #eee;padding:6px;">${esIn?'INGRESO':'VALE'} - ${esIn?m.concepto:(m.items[0]?m.items[0].desc:'Gasto')}</td><td style="border:1px solid #eee;padding:6px;">${m.recibe}</td><td style="border:1px solid #eee;padding:6px;text-align:right;">${esIn?'$'+m.total.toFixed(2):'-'}</td><td style="border:1px solid #eee;padding:6px;text-align:right;">${esIn?'-':'$'+m.total.toFixed(2)}</td></tr>`;
-            });
+            // Totales para el resumen
+            let tIn=0, tOut=0;
+            movs.forEach(m => { const esIn = m.tipo === 'entrada'; if(esIn)tIn+=m.total; else tOut+=m.total; });
 
-            // Llenar datos visuales
-            document.getElementById('r-titulo').innerText = `Reporte ${tipoReporte.toUpperCase()}`;
-            document.getElementById('r-total-in').innerText = '$'+tIn.toFixed(2);
-            document.getElementById('r-total-out').innerText = '$'+tOut.toFixed(2);
-            document.getElementById('r-saldo-neto').innerText = '$'+(tIn-tOut).toFixed(2);
-            document.querySelector('#r-tabla-movimientos tbody').innerHTML = htmlRows;
+            // ===== GENERACIÓN DE PDF REAL (texto vectorial, no imagen) =====
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
 
-            // Mostrar contenedor
-            const el = document.getElementById('reporte-container');
-            el.style.position = 'static'; el.style.left = '0'; el.style.display = 'block';
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('ACOMAACAP - Contabilidad General', 14, 15);
+                doc.setFontSize(11);
+                doc.text(`Reporte ${tipoReporte.toUpperCase()}`, 14, 22);
 
-            if (typeof Android !== 'undefined') {
-                // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
-                const opt = { margin: 10, filename: `Reporte_${tipoReporte}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } };
-                html2pdf().set(opt).from(el).output('datauristring').then(function (pdfBase64) {
-                    el.style.position = 'absolute'; el.style.left = '-9999px';
-                    triggerDownload(pdfBase64, `Reporte_${tipoReporte}_${aS}.pdf`);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, 29);
+                doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, 29);
+                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, 29);
+
+                const filas = movs.map(m => {
+                    const esIn = m.tipo === 'entrada';
+                    return [
+                        `${m.fecha} ${m.hora}`,
+                        `${esIn ? 'INGRESO' : 'VALE'} - ${esIn ? m.concepto : (m.items[0] ? m.items[0].desc : 'Gasto')}`,
+                        m.recibe || '-',
+                        esIn ? `$${m.total.toFixed(2)}` : '-',
+                        esIn ? '-' : `$${m.total.toFixed(2)}`
+                    ];
                 });
-            } else {
-                // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
-                document.title = `Reporte_${tipoReporte}`;
-                imprimirConSistema('reporte-container').then(() => {
-                    el.style.position = 'absolute'; el.style.left = '-9999px';
-                    document.title = 'Caja ACOMAACAP';
+
+                doc.autoTable({
+                    startY: 34,
+                    head: [['Fecha', 'Concepto', 'Recibe/Entrega', 'Ingreso', 'Egreso']],
+                    body: filas,
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    headStyles: { fillColor: [0, 121, 107] },
+                    margin: { left: 14, right: 14 }
                 });
+
+                const filename = `Reporte_${tipoReporte}_${aS}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando el reporte PDF:', e);
+                alert('⚠️ No se pudo generar el reporte PDF: ' + e.message);
             }
         }
 
@@ -1039,109 +1056,77 @@ function borrarTodo() {
         function imprimirPDF(id) {
              const m = movimientos.find(x => x.id === id);
              if(!m) return;
-             if (typeof html2pdf === 'undefined') return alert("⚠️ Error librería PDF. Revise internet.");
 
-             // 1. Construir el contenido HTML del ticket
-             let itemsHtml = '';
-             m.items.forEach(item => {
-                 itemsHtml += `
-                 <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
-                    <span>${item.desc.substring(0,20)} x${item.cant}</span>
-                    <span>$${(item.cant * item.precio).toFixed(2)}</span>
-                 </div>`;
-             });
+             // ===== GENERACIÓN DE PDF REAL (texto vectorial, no imagen) =====
+             try {
+                const { jsPDF } = window.jspdf;
+                const esIn = m.tipo === 'entrada';
 
-             const contenidoTicket = `
-             <div id="ticket-temp-pdf" style="
-                width: 72mm;
-                background: white;
-                color: black;
-                font-family: 'Courier New', monospace;
-                font-size: 11px;
-                line-height: 1.2;
-                padding: 2mm;
-                border: 1px solid white;">
+                // Altura dinámica según cantidad de items
+                const alturaBase = 70; // encabezado + total + firmas + pie
+                const alturaItems = (m.items ? m.items.length : 0) * 5;
+                const alturaMm = alturaBase + alturaItems;
 
-                <div style="text-align:center; margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom:5px;">
-                    <h2 style="margin:0; font-size:14px;">ACOMAACAP</h2>
-                    <p style="margin:0; font-size:10px;">TESORERIA</p>
-                    <p style="margin:5px 0;">Ticket #${m.id}</p>
-                    <p style="margin:0;">${m.fecha} ${m.hora}</p>
-                </div>
+                const doc = new jsPDF({ unit: 'mm', format: [80, alturaMm] });
+                const cx = 40;
+                let y = 8;
 
-                <div style="margin-bottom: 10px; border-bottom: 1px dashed black; padding-bottom:5px;">
-                    <p style="margin:2px 0;"><strong>${m.tipo === 'entrada' ? 'INGRESO' : 'SALIDA'}</strong></p>
-                    <p style="margin:2px 0;">De/Para: ${m.tipo === 'entrada' ? m.concepto : m.recibe}</p>
-                    <p style="margin:2px 0; font-size:9px;">Atendido por: ${m.admin}</p>
-                </div>
+                const linea = (texto, opts = {}) => {
+                    const { size = 9, bold = false, center = true, gap = 5, align = null } = opts;
+                    doc.setFont('courier', bold ? 'bold' : 'normal');
+                    doc.setFontSize(size);
+                    if (align === 'right') doc.text(String(texto), 75, y, { align: 'right' });
+                    else if (center) doc.text(String(texto), cx, y, { align: 'center' });
+                    else doc.text(String(texto), 5, y);
+                    y += gap;
+                };
+                const separador = () => {
+                    doc.setLineDashPattern([1, 1], 0);
+                    doc.line(5, y - 3.5, 75, y - 3.5);
+                    doc.setLineDashPattern([], 0);
+                    y += 1.5;
+                };
 
-                <div style="margin-bottom: 10px;">
-                    ${itemsHtml}
-                </div>
-
-                <div style="border-top: 1px dashed black; padding-top: 5px; text-align: right;">
-                    <strong style="font-size: 16px;">TOTAL: $${m.total.toFixed(2)}</strong>
-                </div>
-
-                <div style="margin-top: 20px; text-align: center; padding-top: 15px;">
-                    <div style="display:flex; justify-content:space-between; font-size: 10px;">
-                        <div style="width: 45%;">
-                            <div style="height: 1px; background: black; margin-bottom: 5px;"></div>
-                            <span>Firma de quien entrega</span>
-                        </div>
-                        <div style="width: 45%;">
-                            <div style="height: 1px; background: black; margin-bottom: 5px;"></div>
-                            <span>Firma de quien recibe</span>
-                        </div>
-                    </div>
-                </div>
-                <div style="text-align: center; margin-top: 15px; font-size: 9px;">
-                    <p>--- Copia Digital ---</p>
-                </div>
-             </div>`;
-
-             // 2. Crear un contenedor temporal VISIBLE pero oculto visualmente (z-index bajo)
-             const container = document.createElement('div');
-             container.innerHTML = contenidoTicket;
-             container.style.position = 'fixed';
-             container.style.top = '0';
-             container.style.left = '0';
-             container.style.zIndex = '-9999';
-             container.style.background = 'white';
-             document.body.appendChild(container);
-
-             const element = document.getElementById('ticket-temp-pdf');
-
-             if (typeof Android !== 'undefined') {
-                 // ===== MODO APK ANDROID: se mantiene generación de PDF vía html2pdf =====
-                 // 3. Calcular la altura dinámica para que NO SE CORTE
-                 const heightPx = element.offsetHeight;
-                 // Se aumentó el margen de altura a 15mm para asegurar espacio para las firmas
-                 const heightMm = Math.floor(heightPx * 0.264583) + 15;
-
-                 const opt = {
-                    margin: 0,
-                    filename: `Ticket_${m.id}.pdf`,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-                    jsPDF: { unit: 'mm', format: [80, heightMm < 60 ? 60 : heightMm], orientation: 'portrait' }
-                 };
-
-                 html2pdf().set(opt).from(element).output('datauristring').then(function (pdfBase64) {
-                    document.body.removeChild(container);
-                    triggerDownload(pdfBase64, `Ticket_${m.id}.pdf`);
-                }).catch(err => {
-                    console.error(err);
-                    alert("Error generando PDF");
-                    document.body.removeChild(container);
+                linea('ACOMAACAP', { size: 13, bold: true, gap: 5 });
+                linea('TESORERIA', { size: 8, gap: 5 });
+                linea(`Ticket #${m.id}`, { size: 8, gap: 4.5 });
+                linea(`${m.fecha} ${m.hora}`, { size: 8, gap: 5 });
+                separador();
+                linea(esIn ? 'INGRESO' : 'SALIDA', { size: 9.5, bold: true, center: false, gap: 4.5 });
+                linea(`De/Para: ${esIn ? m.concepto : m.recibe}`, { size: 8, center: false, gap: 4.5 });
+                linea(`Atendido por: ${m.admin}`, { size: 7.5, center: false, gap: 5 });
+                separador();
+                (m.items || []).forEach(item => {
+                    doc.setFont('courier', 'normal');
+                    doc.setFontSize(8.5);
+                    doc.text(`${item.desc.substring(0,20)} x${item.cant}`, 5, y);
+                    doc.text(`$${(item.cant * item.precio).toFixed(2)}`, 75, y, { align: 'right' });
+                    y += 5;
                 });
-             } else {
-                 // ===== MODO PC / WINDOWS: imprime con el sistema operativo =====
-                 document.title = `Ticket_${m.id}`;
-                 imprimirConSistema('ticket-temp-pdf').then(() => {
-                     document.body.removeChild(container);
-                     document.title = 'Caja ACOMAACAP';
-                 });
+                separador();
+                linea(`TOTAL: $${m.total.toFixed(2)}`, { size: 12, bold: true, align: 'right', gap: 12 });
+
+                // Espacios de firma
+                doc.setLineWidth(0.2);
+                doc.line(8, y, 35, y);
+                doc.line(45, y, 72, y);
+                y += 4;
+                doc.setFont('courier', 'normal');
+                doc.setFontSize(7);
+                doc.text('Quien entrega', 21.5, y, { align: 'center' });
+                doc.text('Quien recibe', 58.5, y, { align: 'center' });
+                y += 8;
+                linea('--- Copia Digital ---', { size: 7, gap: 4 });
+
+                const filename = `Ticket_${m.id}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+             } catch (e) {
+                console.error('Error generando el ticket PDF:', e);
+                alert('⚠️ No se pudo generar el ticket PDF: ' + e.message);
              }
         }
 
@@ -1315,8 +1300,19 @@ function borrarTodo() {
                 };
                 window.onafterprint = finalizar;
                 setTimeout(() => {
-                    window.print();
-                    setTimeout(finalizar, 800);
+                    try {
+                        if (typeof window.print === 'function') {
+                            window.print();
+                        } else {
+                            alert('⚠️ Este navegador no permite abrir el diálogo de impresión.');
+                        }
+                    } catch (e) {
+                        console.error('Error al imprimir:', e);
+                        alert('⚠️ No se pudo abrir el diálogo de impresión: ' + e.message);
+                    } finally {
+                        // Pase lo que pase, siempre se oculta el elemento y se libera la pantalla.
+                        setTimeout(finalizar, 800);
+                    }
                 }, 150);
             });
         }
