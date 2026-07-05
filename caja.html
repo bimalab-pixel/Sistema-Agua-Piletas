@@ -589,7 +589,7 @@
         }
 
         // --- GUARDAR ---
-        function guardarMovimiento(tipo) {
+        async function guardarMovimiento(tipo) {
             const fecha = new Date();
             const nuevoMov = {
                 id: Date.now(),
@@ -641,14 +641,27 @@
                 nuevoMov.total = total;
                 nuevoMov.items = items;
 
-                if(confirm("✅ Vale generado. ¿Imprimir Ticket?")) {
-                    imprimirBluetooth(nuevoMov);
-                }
-
                 document.getElementById('out-recibe').value = '';
                 document.getElementById('items-container').innerHTML = '';
                 agregarFilaItem();
                 calcularTotalGasto();
+            }
+
+            // --- Asignar número correlativo de recibo (Firestore si hay internet, local si no) ---
+            if (typeof window.generarNumeroRecibo === 'function') {
+                try {
+                    const numInfo = await window.generarNumeroRecibo();
+                    nuevoMov.numeroRecibo = numInfo.numero;
+                    nuevoMov.numeroFormateado = numInfo.formateado;
+                    nuevoMov.numeroOrigen = numInfo.origen;
+                    nuevoMov.numeroPendiente = numInfo.pendiente;
+                } catch (e) {
+                    console.error('No se pudo generar número de recibo:', e);
+                }
+            }
+
+            if (tipo !== 'entrada' && confirm("✅ Vale generado. ¿Imprimir Ticket?")) {
+                imprimirBluetooth(nuevoMov);
             }
 
             movimientos.push(nuevoMov);
@@ -904,37 +917,62 @@ function borrarTodo() {
             return window.btoa(unescape(encodeURIComponent(str)));
         }
 
+        // Divide un texto en varias líneas de máximo "ancho" caracteres, sin cortar
+        // palabras a la mitad (para que no se pierda información en el ticket térmico).
+        function envolverTextoPlano(texto, ancho) {
+            const palabras = String(texto).split(' ');
+            const lineas = [];
+            let actual = '';
+            palabras.forEach(p => {
+                const prueba = actual ? `${actual} ${p}` : p;
+                if (prueba.length > ancho) {
+                    if (actual) lineas.push(actual);
+                    actual = p;
+                } else {
+                    actual = prueba;
+                }
+            });
+            if (actual) lineas.push(actual);
+            return lineas.length ? lineas : [''];
+        }
+
         // --- FUNCIÓN TICKET BLUETOOTH ACTUALIZADA (Con Firmas) ---
         function imprimirBluetooth(m) {
             let t = "";
+            const ANCHO = 32; // columnas del ticket térmico (58mm)
             // Centrar título manualmente con espacios (ajustado para 58mm/80mm)
             t += "           ACOMAACAP\n";
             t += "          TESORERIA\n";
             t += "--------------------------------\n";
-            t += `Ticket: ${m.id.toString().slice(-6)}\n`;
+            t += `Ticket: ${m.numeroFormateado || ('#' + m.id.toString().slice(-6))}\n`;
+            if (m.numeroPendiente) t += "(numero temporal, sin internet)\n";
             t += `Fecha: ${m.fecha} ${m.hora}\n`;
             t += "--------------------------------\n";
 
-            // --- DATOS DEL MOVIMIENTO ---
+            // --- DATOS DEL MOVIMIENTO (con ajuste de línea, sin cortar información) ---
             if (m.tipo === 'entrada') {
                 t += "TIPO: INGRESO\n";
-                t += `Ref: ${m.concepto.substring(0,20)}\n`;
-                t += `Atiende: ${m.admin.substring(0,20)}\n`;
+                envolverTextoPlano(`Ref: ${m.concepto}`, ANCHO).forEach(l => t += l + "\n");
+                envolverTextoPlano(`Atiende: ${m.admin}`, ANCHO).forEach(l => t += l + "\n");
             } else {
                 t += "TIPO: VALE SALIDA\n";
-                t += `Entrega: ${m.admin.substring(0,20)}\n`;
-                t += `Recibe: ${m.recibe.substring(0,20)}\n`;
+                envolverTextoPlano(`Entrega: ${m.admin}`, ANCHO).forEach(l => t += l + "\n");
+                envolverTextoPlano(`Recibe: ${m.recibe}`, ANCHO).forEach(l => t += l + "\n");
             }
 
             t += "--------------------------------\n";
             t += "DESCRIPCION      CANT   TOTAL\n";
 
             m.items.forEach(item => {
-                // Cortamos descripción a 16 chars para que quepa en una línea
-                let desc = item.desc.substring(0, 16).padEnd(16, ' ');
-                let cant = item.cant.toString().padEnd(3, ' ');
-                let sub = (item.cant * item.precio).toFixed(2);
-                t += `${desc} ${cant} $${sub}\n`;
+                // La descripción se envuelve en varias líneas si no cabe en 16 chars;
+                // cantidad y total solo se imprimen junto a la primera línea.
+                const descLineas = envolverTextoPlano(item.desc, 16);
+                const cant = item.cant.toString().padEnd(3, ' ');
+                const sub = (item.cant * item.precio).toFixed(2);
+                t += `${(descLineas[0] || '').padEnd(16, ' ')} ${cant} $${sub}\n`;
+                for (let i = 1; i < descLineas.length; i++) {
+                    t += `${descLineas[i]}\n`;
+                }
             });
 
             t += "--------------------------------\n";
@@ -1007,18 +1045,41 @@ function borrarTodo() {
             try {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const centerX = pageWidth / 2;
+
+                // --- Texto del periodo que se está imprimiendo ---
+                const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                let periodoTxt = '';
+                if (tipoReporte === 'anual') {
+                    periodoTxt = `Año ${aS}`;
+                } else if (tipoReporte === 'mensual') {
+                    periodoTxt = `${meses[mS]} ${aS}`;
+                } else if (tipoReporte === 'diario') {
+                    periodoTxt = `${String(dS).padStart(2,'0')} de ${meses[mS]} de ${aS}`;
+                }
+
+                // --- Fecha y hora de la impresión ---
+                const ahora = new Date();
+                const fechaImpresion = ahora.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const horaImpresion = ahora.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(14);
-                doc.text('ACOMAACAP - Contabilidad General', 14, 15);
+                doc.text('ACOMAACAP - Contabilidad General', centerX, 15, { align: 'center' });
                 doc.setFontSize(11);
-                doc.text(`Reporte ${tipoReporte.toUpperCase()}`, 14, 22);
+                doc.text(`Reporte ${tipoReporte.toUpperCase()} - ${periodoTxt}`, centerX, 22, { align: 'center' });
 
                 doc.setFont('helvetica', 'normal');
+                doc.setFontSize(8);
+                doc.setTextColor(100);
+                doc.text(`Impreso el: ${fechaImpresion} ${horaImpresion}`, centerX, 27, { align: 'center' });
+                doc.setTextColor(0);
+
                 doc.setFontSize(9);
-                doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, 29);
-                doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, 29);
-                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, 29);
+                doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, 34);
+                doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, 34);
+                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, 34);
 
                 const filas = movs.map(m => {
                     const esIn = m.tipo === 'entrada';
@@ -1032,13 +1093,36 @@ function borrarTodo() {
                 });
 
                 doc.autoTable({
-                    startY: 34,
+                    startY: 39,
                     head: [['Fecha', 'Concepto', 'Recibe/Entrega', 'Ingreso', 'Egreso']],
                     body: filas,
                     styles: { fontSize: 8, cellPadding: 2 },
                     headStyles: { fillColor: [0, 121, 107] },
                     margin: { left: 14, right: 14 }
                 });
+
+                // --- Totales al final del documento ---
+                const pageHeight = doc.internal.pageSize.getHeight();
+                let finalY = doc.lastAutoTable.finalY + 12;
+                if (finalY + 22 > pageHeight - 15) {
+                    doc.addPage();
+                    finalY = 20;
+                }
+                doc.setDrawColor(0, 121, 107);
+                doc.setLineWidth(0.5);
+                doc.line(14, finalY - 5, pageWidth - 14, finalY - 5);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.text('RESUMEN DEL PERIODO', centerX, finalY, { align: 'center' });
+                finalY += 7;
+
+                doc.setFontSize(9);
+                doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, finalY);
+                doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, finalY);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, finalY);
+                doc.setFont('helvetica', 'normal');
 
                 const filename = `Reporte_${tipoReporte}_${aS}.pdf`;
                 if (typeof Android !== 'undefined' && Android.guardarArchivo) {
@@ -1061,11 +1145,24 @@ function borrarTodo() {
              try {
                 const { jsPDF } = window.jspdf;
                 const esIn = m.tipo === 'entrada';
+                const anchoUtil = 70; // ancho útil del ticket (de x=5 a x=75, en un papel de 80mm)
 
-                // Altura dinámica según cantidad de items
+                const textoDePara = `De/Para: ${esIn ? m.concepto : m.recibe}`;
+                const textoAtiende = `Atendido por: ${m.admin}`;
+
+                // Medimos cuántas líneas ocupará cada texto largo ANTES de fijar el
+                // tamaño final de la página, para que nada quede cortado en los lados.
+                const medidor = new jsPDF({ unit: 'mm', format: [80, 100] });
+                medidor.setFont('courier', 'normal'); medidor.setFontSize(8);
+                const lineasDePara = medidor.splitTextToSize(textoDePara, anchoUtil);
+                medidor.setFontSize(7.5);
+                const lineasAtiende = medidor.splitTextToSize(textoAtiende, anchoUtil);
+                const lineasExtra = (lineasDePara.length - 1) + (lineasAtiende.length - 1);
+
+                // Altura dinámica según cantidad de items y de líneas extra por ajuste de texto
                 const alturaBase = 70; // encabezado + total + firmas + pie
                 const alturaItems = (m.items ? m.items.length : 0) * 5;
-                const alturaMm = alturaBase + alturaItems;
+                const alturaMm = alturaBase + alturaItems + (lineasExtra * 4.2);
 
                 const doc = new jsPDF({ unit: 'mm', format: [80, alturaMm] });
                 const cx = 40;
@@ -1080,6 +1177,14 @@ function borrarTodo() {
                     else doc.text(String(texto), 5, y);
                     y += gap;
                 };
+                // Igual que linea(), pero para textos largos que ya vienen divididos
+                // en varias líneas (evita que el texto se salga por los lados).
+                const lineaMultiple = (lineasArr, opts = {}) => {
+                    const { size = 8, bold = false, gap = 4.2 } = opts;
+                    doc.setFont('courier', bold ? 'bold' : 'normal');
+                    doc.setFontSize(size);
+                    lineasArr.forEach(l => { doc.text(l, 5, y); y += gap; });
+                };
                 const separador = () => {
                     doc.setLineDashPattern([1, 1], 0);
                     doc.line(5, y - 3.5, 75, y - 3.5);
@@ -1089,17 +1194,19 @@ function borrarTodo() {
 
                 linea('ACOMAACAP', { size: 13, bold: true, gap: 5 });
                 linea('TESORERIA', { size: 8, gap: 5 });
-                linea(`Ticket #${m.id}`, { size: 8, gap: 4.5 });
+                linea(`Ticket ${m.numeroFormateado || ('#' + m.id)}`, { size: 8, gap: 4.5 });
+                if (m.numeroPendiente) linea('(numero temporal, sin internet)', { size: 6.5, gap: 4 });
                 linea(`${m.fecha} ${m.hora}`, { size: 8, gap: 5 });
                 separador();
                 linea(esIn ? 'INGRESO' : 'SALIDA', { size: 9.5, bold: true, center: false, gap: 4.5 });
-                linea(`De/Para: ${esIn ? m.concepto : m.recibe}`, { size: 8, center: false, gap: 4.5 });
-                linea(`Atendido por: ${m.admin}`, { size: 7.5, center: false, gap: 5 });
+                lineaMultiple(lineasDePara, { size: 8, gap: 4.2 });
+                lineaMultiple(lineasAtiende, { size: 7.5, gap: 4 });
                 separador();
                 (m.items || []).forEach(item => {
                     doc.setFont('courier', 'normal');
                     doc.setFontSize(8.5);
-                    doc.text(`${item.desc.substring(0,20)} x${item.cant}`, 5, y);
+                    const descLinea = doc.splitTextToSize(`${item.desc} x${item.cant}`, anchoUtil - 18)[0] || '';
+                    doc.text(descLinea, 5, y);
                     doc.text(`$${(item.cant * item.precio).toFixed(2)}`, 75, y, { align: 'right' });
                     y += 5;
                 });
@@ -1118,7 +1225,8 @@ function borrarTodo() {
                 y += 8;
                 linea('--- Copia Digital ---', { size: 7, gap: 4 });
 
-                const filename = `Ticket_${m.id}.pdf`;
+                const numArchivo = String(m.numeroRecibo || m.id).replace('#', '');
+                const filename = `Ticket_${numArchivo}.pdf`;
                 if (typeof Android !== 'undefined' && Android.guardarArchivo) {
                     Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
                 } else {
@@ -1174,7 +1282,7 @@ function borrarTodo() {
         } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
         import {
             initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-            collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, writeBatch
+            collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, writeBatch, runTransaction
         } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -1197,6 +1305,80 @@ function borrarTodo() {
             const el = document.getElementById('sync-status');
             if (el) el.innerText = txt;
         }
+
+        // ================= NUMERACIÓN CORRELATIVA DE RECIBOS =================
+        // Con internet: usa un contador atómico en Firestore (contadores/recibos),
+        // así el número es único aunque haya varios dispositivos guardando a la vez.
+        // Sin internet: usa un contador local por dispositivo con un prefijo "OFF-"
+        // para que nunca choque con los números reales, y se reconcilia
+        // automáticamente al recuperar la conexión.
+        const RECIBOS_COUNTER_REF = doc(db, 'contadores', 'recibos');
+
+        function getDeviceId() {
+            let id = localStorage.getItem('caja_device_id');
+            if (!id) {
+                id = Math.random().toString(36).substring(2, 6).toUpperCase();
+                localStorage.setItem('caja_device_id', id);
+            }
+            return id;
+        }
+
+        async function obtenerNumeroFirestore() {
+            return await runTransaction(db, async (tx) => {
+                const snap = await tx.get(RECIBOS_COUNTER_REF);
+                const actual = snap.exists() ? (snap.data().ultimo || 0) : 0;
+                const siguiente = actual + 1;
+                tx.set(RECIBOS_COUNTER_REF, { ultimo: siguiente, actualizadoEn: serverTimestamp() }, { merge: true });
+                return siguiente;
+            });
+        }
+
+        function obtenerNumeroLocal() {
+            const key = 'caja_correlativo_local';
+            const seq = parseInt(localStorage.getItem(key) || '0', 10) + 1;
+            localStorage.setItem(key, String(seq));
+            return `OFF-${getDeviceId()}-${String(seq).padStart(3, '0')}`;
+        }
+
+        // Genera el número de recibo para un nuevo movimiento.
+        window.generarNumeroRecibo = async function () {
+            if (navigator.onLine) {
+                try {
+                    const n = await obtenerNumeroFirestore();
+                    return { numero: n, formateado: '#' + String(n).padStart(5, '0'), origen: 'firestore', pendiente: false };
+                } catch (e) {
+                    console.warn('No se pudo generar número correlativo en Firestore, se usa numeración local temporal:', e);
+                }
+            }
+            const local = obtenerNumeroLocal();
+            return { numero: local, formateado: local, origen: 'local', pendiente: true };
+        };
+
+        // Cuando vuelve la conexión, reemplaza los números temporales "OFF-..." por
+        // números reales y consecutivos de Firestore, en el mismo orden en que se crearon.
+        async function reconciliarNumerosPendientes() {
+            const pendientes = movimientos.filter(m => m.numeroPendiente).sort((a, b) => a.timestamp - b.timestamp);
+            if (pendientes.length === 0) return;
+            for (const m of pendientes) {
+                try {
+                    const n = await obtenerNumeroFirestore();
+                    m.numeroRecibo = n;
+                    m.numeroFormateado = '#' + String(n).padStart(5, '0');
+                    m.numeroOrigen = 'firestore';
+                    m.numeroPendiente = false;
+                    if (typeof syncMovimiento === 'function') syncMovimiento(m);
+                } catch (e) {
+                    console.error('No se pudo reconciliar número de recibo, se reintentará más tarde:', e);
+                    break;
+                }
+            }
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            const hist = document.getElementById('historial');
+            if (hist && hist.classList.contains('active') && typeof renderHistorial === 'function') renderHistorial();
+        }
+        window.addEventListener('online', reconciliarNumerosPendientes);
+        // ================= FIN NUMERACIÓN CORRELATIVA =================
 
         // ---------- LOGIN (misma cuenta que en index.html) ----------
         window.iniciarSesion = function () {
