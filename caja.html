@@ -232,6 +232,22 @@
                     <div style="font-size:0.7rem; color:#c62828; margin-top:5px;">Ver detalles 📄</div>
                 </div>
             </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px;">
+                <div style="background:#e3f2fd; border-radius:10px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:0.68rem; font-weight:700; color:#1565c0;">💧 AGUA</div>
+                    <div id="dash-total-agua" style="font-size:1.05rem; font-weight:800; color:#1565c0;">$0.00</div>
+                </div>
+                <div style="background:#fff3e0; border-radius:10px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:0.68rem; font-weight:700; color:#e65100;">🚧 CALLE</div>
+                    <div id="dash-total-calle" style="font-size:1.05rem; font-weight:800; color:#e65100;">$0.00</div>
+                </div>
+                <div style="background:#f3e5f5; border-radius:10px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:0.68rem; font-weight:700; color:#6a1b9a;">📦 OTROS</div>
+                    <div id="dash-total-otros" style="font-size:1.05rem; font-weight:800; color:#6a1b9a;">$0.00</div>
+                </div>
+            </div>
+            <p style="font-size:0.7rem; color:#90a4ae; text-align:center; margin:6px 0 0;">Desglose de Ingresos del mes (Agua + Calle + Otros = Ingresos)</p>
         </div>
 
         <div id="ingreso" class="section">
@@ -340,7 +356,7 @@
                 </div>
             </div>
 
-            <div id="historial-resumen" style="display:flex; gap:10px; margin-bottom:15px; background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eceff1;">
+            <div id="historial-resumen" style="display:flex; gap:10px; margin-bottom:10px; background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eceff1;">
                 <div style="flex:1; text-align:center; border-right:1px solid #eee;">
                     <span style="font-size:0.7rem; color:#558b2f; font-weight:700;">TOTAL FILTRADO (+)</span><br>
                     <strong style="font-size:1.1rem; color:#2e7d32;" id="hist-total-in">$0.00</strong>
@@ -348,6 +364,21 @@
                 <div style="flex:1; text-align:center;">
                     <span style="font-size:0.7rem; color:#c62828; font-weight:700;">TOTAL FILTRADO (-)</span><br>
                     <strong style="font-size:1.1rem; color:#c62828;" id="hist-total-out">$0.00</strong>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:15px;">
+                <div style="flex:1; text-align:center; background:#e3f2fd; border-radius:10px; padding:8px;">
+                    <span style="font-size:0.65rem; color:#1565c0; font-weight:700;">💧 AGUA</span><br>
+                    <strong style="font-size:0.95rem; color:#1565c0;" id="hist-total-agua">$0.00</strong>
+                </div>
+                <div style="flex:1; text-align:center; background:#fff3e0; border-radius:10px; padding:8px;">
+                    <span style="font-size:0.65rem; color:#e65100; font-weight:700;">🚧 CALLE</span><br>
+                    <strong style="font-size:0.95rem; color:#e65100;" id="hist-total-calle">$0.00</strong>
+                </div>
+                <div style="flex:1; text-align:center; background:#f3e5f5; border-radius:10px; padding:8px;">
+                    <span style="font-size:0.65rem; color:#6a1b9a; font-weight:700;">📦 OTROS</span><br>
+                    <strong style="font-size:0.95rem; color:#6a1b9a;" id="hist-total-otros">$0.00</strong>
                 </div>
             </div>
 
@@ -671,11 +702,36 @@
             mostrarSeccion('dashboard');
         }
 
+        // Dado un movimiento de INGRESO, separa cuánto corresponde a:
+        // - agua: Consumo de agua (facturación normal, viene de index.html)
+        // - calle: Trabajo de Calle / cargos extra (viene de index.html)
+        // - otros: cualquier ingreso que no venga del sistema de agua (ingresos manuales, ventas, etc.)
+        // Se apoya en el desglose de "items" que ya trae cada movimiento (no requiere datos nuevos).
+        function desglosarItemsMovimiento(m) {
+            let agua = 0, calle = 0, otros = 0;
+            if (m.tipo !== 'entrada') return { agua, calle, otros };
+
+            if (m.items && m.items.length > 0) {
+                m.items.forEach(it => {
+                    const precio = parseFloat(it.precio) || 0;
+                    const desc = it.desc || '';
+                    if (desc.indexOf('Trabajo de Calle') === 0) calle += precio;
+                    else if (desc.indexOf('Consumo Agua') === 0) agua += precio;
+                    else otros += precio;
+                });
+            } else {
+                // Ingresos manuales ("Registrar Entrada") no traen items: son ajenos al agua.
+                otros += (m.total || 0);
+            }
+            return { agua, calle, otros };
+        }
+
         // --- DASHBOARD ---
         function actualizarDashboard() {
             let saldo = 0;
             let inMes = 0;
             let outMes = 0;
+            let aguaMes = 0, calleMes = 0, otrosMes = 0;
             const hoy = new Date();
 
             movimientos.forEach(m => {
@@ -684,7 +740,11 @@
 
                 if (m.tipo === 'entrada') {
                     saldo += m.total;
-                    if(esEsteMes) inMes += m.total;
+                    if(esEsteMes) {
+                        inMes += m.total;
+                        const { agua, calle, otros } = desglosarItemsMovimiento(m);
+                        aguaMes += agua; calleMes += calle; otrosMes += otros;
+                    }
                 } else {
                     saldo -= m.total;
                     if(esEsteMes) outMes += m.total;
@@ -694,6 +754,9 @@
             document.getElementById('dash-saldo').innerText = '$' + saldo.toFixed(2);
             document.getElementById('dash-total-in').innerText = '$' + inMes.toFixed(2);
             document.getElementById('dash-total-out').innerText = '$' + outMes.toFixed(2);
+            document.getElementById('dash-total-agua').innerText = '$' + aguaMes.toFixed(2);
+            document.getElementById('dash-total-calle').innerText = '$' + calleMes.toFixed(2);
+            document.getElementById('dash-total-otros').innerText = '$' + otrosMes.toFixed(2);
 
             document.getElementById('dash-saldo').style.color = saldo >= 0 ? 'var(--primary-dark)' : 'var(--danger)';
         }
@@ -708,6 +771,10 @@
         function construirTarjetaMovimiento(m) {
             const isEntrada = m.tipo === 'entrada';
             const conceptoDisplay = isEntrada ? m.concepto : m.recibe;
+            // Los movimientos que vienen de un recibo de agua (index.html) traen reciboId.
+            // Esos NO se pueden borrar desde Caja: hay que borrarlos desde el recibo en
+            // el Sistema de Agua, para que se eliminen también de aquí automáticamente.
+            const esDeAgua = !!m.reciboId;
 
             let htmlItems = '';
             if (!isEntrada && m.items && m.items.length > 0) {
@@ -716,6 +783,23 @@
                 </div>`;
             }
 
+            // Si es un ingreso que incluye Trabajo de Calle, lo señalamos aparte
+            // para que se vea de un vistazo cuánto de ese cobro es agua y cuánto es calle.
+            let notaCalle = '';
+            if (isEntrada) {
+                const { calle } = desglosarItemsMovimiento(m);
+                if (calle > 0) {
+                    notaCalle = `<div style="font-size:0.72rem; color:#e65100; margin-top:4px;">🚧 incl. $${calle.toFixed(2)} Trabajo de Calle</div>`;
+                }
+            }
+            if (esDeAgua) {
+                notaCalle += `<div style="font-size:0.7rem; color:#1565c0; margin-top:2px;">💧 Viene del Sistema de Agua</div>`;
+            }
+
+            const botonBorrar = esDeAgua
+                ? `<span title="Este movimiento viene de un recibo de agua. Bórralo desde el Sistema de Agua." style="width:auto; padding:6px 10px; margin:0; font-size:0.8rem; color:#b0bec5;">🔒</span>`
+                : `<button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="borrarMovimiento(${m.id})">🗑️</button>`;
+
             return `
                 <div class="list-item">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -723,6 +807,7 @@
                             <span class="badge ${isEntrada ? 'badge-in' : 'badge-out'}">${isEntrada ? 'INGRESO' : 'SALIDA'}</span>
                             <strong style="margin-left:5px; font-size:1.05rem;">${conceptoDisplay}</strong>
                             <div style="font-size:0.75rem; color:#b0bec5; margin-top:4px;">${m.fecha} • ${m.hora}</div>
+                            ${notaCalle}
                         </div>
                         <div style="text-align:right;">
                             <span style="font-size:1.2rem; font-weight:800; color:${isEntrada ? 'var(--secondary)' : 'var(--danger)'}">
@@ -731,10 +816,10 @@
                         </div>
                     </div>
                     ${htmlItems}
-                    <div style="text-align:right; margin-top:12px; padding-top:10px; border-top:1px dashed #eceff1; display:flex; gap:10px; justify-content:flex-end;">
+                    <div style="text-align:right; margin-top:12px; padding-top:10px; border-top:1px dashed #eceff1; display:flex; gap:10px; justify-content:flex-end; align-items:center;">
                          <button class="btn-bt" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirBluetoothById(${m.id})">📱 Ticket</button>
                          <button class="btn-primary" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirPDF(${m.id})">📄 PDF</button>
-                         <button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="borrarMovimiento(${m.id})">🗑️</button>
+                         ${botonBorrar}
                     </div>
                 </div>`;
         }
@@ -755,6 +840,7 @@
             // Filtramos una sola vez y calculamos los totales sobre TODO lo filtrado,
             // no solo sobre lo que ya está pintado en pantalla.
             let sumIn = 0, sumOut = 0;
+            let sumAgua = 0, sumCalle = 0, sumOtros = 0;
             historialFiltrados = lista.filter(m => {
                 const mDate = new Date(m.timestamp);
                 if (fAnio !== 'todos' && mDate.getFullYear() != fAnio) return false;
@@ -762,12 +848,21 @@
                 if (fDia !== 'todos' && mDate.getDate() != fDia) return false;
                 if (fTipo !== 'todos' && m.tipo !== fTipo) return false;
 
-                if (m.tipo === 'entrada') sumIn += m.total; else sumOut += m.total;
+                if (m.tipo === 'entrada') {
+                    sumIn += m.total;
+                    const { agua, calle, otros } = desglosarItemsMovimiento(m);
+                    sumAgua += agua; sumCalle += calle; sumOtros += otros;
+                } else {
+                    sumOut += m.total;
+                }
                 return true;
             });
 
             document.getElementById('hist-total-in').innerText = '$' + sumIn.toFixed(2);
             document.getElementById('hist-total-out').innerText = '$' + sumOut.toFixed(2);
+            document.getElementById('hist-total-agua').innerText = '$' + sumAgua.toFixed(2);
+            document.getElementById('hist-total-calle').innerText = '$' + sumCalle.toFixed(2);
+            document.getElementById('hist-total-otros').innerText = '$' + sumOtros.toFixed(2);
 
             if (historialFiltrados.length === 0) {
                 div.innerHTML = lista.length === 0
@@ -840,6 +935,11 @@
         }
 
         function borrarMovimiento(id) {
+            const m = movimientos.find(x => x.id === id);
+            if (m && m.reciboId) {
+                alert("🔒 Este movimiento viene de un recibo de agua (Sistema de Agua) y no se puede borrar desde Caja.\n\nPara eliminarlo, bórralo desde el recibo correspondiente en el Sistema de Agua (Historial/Recibos) — al hacerlo, se elimina también aquí automáticamente.");
+                return;
+            }
             if(confirm("¿Eliminar este registro permanentemente?")) {
                 movimientos = movimientos.filter(m => m.id !== id);
                 localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
