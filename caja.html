@@ -218,7 +218,12 @@
                 </div>
             </div>
 
-            <h3 style="margin-bottom:15px; color:#546e7a;">Resumen del Mes</h3>
+            <div class="card card-action" style="background:#eceff1; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px;" onclick="mostrarSeccion('boleta-pago')">
+                <span class="card-icon" style="font-size:1.4rem;">🧑‍🔧</span>
+                <span class="card-label" style="font-size:0.9rem;">Generar Boleta de Pago (Empleado)</span>
+            </div>
+
+            <h3 style="margin-bottom:15px; color:#546e7a;">Resumen de <span id="dash-mes-actual">este Mes</span></h3>
             <div style="display:flex; gap:15px;">
                 <div class="card" onclick="irAHistorial('entrada')" style="flex:1; background:#f1f8e9; text-align:center; padding:15px; border:1px solid #c5e1a5; cursor: pointer; transition: transform 0.1s;">
                     <span style="font-size:0.75rem; color:#558b2f; font-weight:700; text-transform:uppercase;">Ingresos</span><br>
@@ -306,6 +311,71 @@
 
                 <button class="btn btn-danger" onclick="guardarMovimiento('salida')">💾 Generar Vale</button>
                 <button class="btn btn-bt" style="background:#cfd8dc; color:#455a64; box-shadow:none;" onclick="mostrarSeccion('dashboard')">Cancelar</button>
+
+                <p style="text-align:center; margin-top:18px; font-size:0.85rem;">
+                    ¿Vas a pagar planilla a un empleado?
+                    <a href="javascript:void(0)" onclick="mostrarSeccion('boleta-pago')" style="color:var(--primary); font-weight:700;">Generar Boleta de Pago formal →</a>
+                </p>
+            </div>
+        </div>
+
+        <div id="boleta-pago" class="section">
+            <h2 style="color: var(--danger);">🧑‍🔧 Boleta de Pago (Empleado)</h2>
+            <div class="card card-expense">
+                <label>Nombre del Empleado:</label>
+                <input type="text" id="bp-nombre" placeholder="Nombre completo...">
+
+                <label>Cargo / Puesto (opcional):</label>
+                <input type="text" id="bp-cargo" placeholder="Ej. Fontanero, Tesorero...">
+
+                <label>Periodo Pagado:</label>
+                <input type="text" id="bp-periodo" placeholder="Ej. Quincena del 1 al 15 de julio de 2026">
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 10px;">
+                    <label style="margin:0; color:#2e7d32;">➕ Devengos (Ingresos)</label>
+                    <button type="button" class="btn-add-item" onclick="agregarFilaBoleta('devengos')">+</button>
+                </div>
+                <table class="items-table">
+                    <thead>
+                    <tr>
+                        <th width="60%">Concepto</th>
+                        <th width="30%">Monto</th>
+                        <th width="10%"></th>
+                    </tr>
+                    </thead>
+                    <tbody id="bp-devengos-container"></tbody>
+                </table>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin:20px 0 10px;">
+                    <label style="margin:0; color:#c62828;">➖ Deducciones (Descuentos)</label>
+                    <button type="button" class="btn-add-item" onclick="agregarFilaBoleta('deducciones')">+</button>
+                </div>
+                <table class="items-table">
+                    <thead>
+                    <tr>
+                        <th width="60%">Concepto</th>
+                        <th width="30%">Monto</th>
+                        <th width="10%"></th>
+                    </tr>
+                    </thead>
+                    <tbody id="bp-deducciones-container"></tbody>
+                </table>
+
+                <div style="margin: 25px 0; padding-top:15px; border-top:2px dashed #eceff1;">
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#546e7a;">
+                        <span>Total Devengado:</span><strong id="bp-total-devengado">$0.00</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#546e7a; margin-top:4px;">
+                        <span>Total Deducciones:</span><strong id="bp-total-deducciones">$0.00</strong>
+                    </div>
+                    <div style="text-align:right; margin-top:14px;">
+                        <span style="font-size:0.9rem; color:#90a4ae; font-weight:700;">NETO A PAGAR</span><br>
+                        <span id="bp-neto-display" style="font-size:2.5rem; font-weight:800; color:var(--danger);">$0.00</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-danger" onclick="guardarBoletaPago()">💾 Generar Boleta y Descontar de Caja</button>
+                <button class="btn btn-bt" style="background:#cfd8dc; color:#455a64; box-shadow:none;" onclick="mostrarSeccion('dashboard')">Cancelar</button>
             </div>
         </div>
 
@@ -357,12 +427,12 @@
             </div>
 
             <div id="historial-resumen" style="display:flex; gap:10px; margin-bottom:10px; background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eceff1;">
-                <div style="flex:1; text-align:center; border-right:1px solid #eee;">
-                    <span style="font-size:0.7rem; color:#558b2f; font-weight:700;">TOTAL FILTRADO (+)</span><br>
+                <div id="hist-caja-ingresos" onclick="filtrarHistorialPorTipo('entrada')" style="flex:1; text-align:center; border-right:1px solid #eee; cursor:pointer; padding:4px; border-radius:8px; transition: background 0.15s;">
+                    <span style="font-size:0.7rem; color:#558b2f; font-weight:700;">INGRESOS</span><br>
                     <strong style="font-size:1.1rem; color:#2e7d32;" id="hist-total-in">$0.00</strong>
                 </div>
-                <div style="flex:1; text-align:center;">
-                    <span style="font-size:0.7rem; color:#c62828; font-weight:700;">TOTAL FILTRADO (-)</span><br>
+                <div id="hist-caja-egresos" onclick="filtrarHistorialPorTipo('salida')" style="flex:1; text-align:center; cursor:pointer; padding:4px; border-radius:8px; transition: background 0.15s;">
+                    <span style="font-size:0.7rem; color:#c62828; font-weight:700;">EGRESOS</span><br>
                     <strong style="font-size:1.1rem; color:#c62828;" id="hist-total-out">$0.00</strong>
                 </div>
             </div>
@@ -587,6 +657,7 @@
             if(id === 'dashboard') actualizarDashboard();
             if(id === 'historial') renderHistorial();
             if(id === 'gasto') actualizarUIAdmin();
+            if(id === 'boleta-pago') prepararFormularioBoleta();
         }
 
         // --- TABLA DE GASTOS ---
@@ -711,16 +782,32 @@
             let agua = 0, calle = 0, otros = 0;
             if (m.tipo !== 'entrada') return { agua, calle, otros };
 
+            // Cualquier ingreso que traiga reciboId viene, sin ninguna duda, del Sistema de
+            // Agua (index.html lo pone siempre al cobrar un recibo). Antes clasificábamos
+            // por el TEXTO exacto de cada item ("Consumo Agua: ..."), y si ese texto venía
+            // con una redacción distinta (versiones viejas, migraciones, etc.) el monto caía
+            // por error en "Otros". Ahora, si sabemos que es un cobro de agua, nunca lo
+            // mandamos a "Otros": en el peor de los casos cae en "Agua" (nunca se pierde ni
+            // se clasifica como ajeno al agua), y detectamos "Calle" buscando la palabra en
+            // cualquier parte del texto (no solo al inicio), para cubrir más variantes.
+            const esDeAgua = !!m.reciboId;
+
             if (m.items && m.items.length > 0) {
                 m.items.forEach(it => {
                     const precio = parseFloat(it.precio) || 0;
-                    const desc = it.desc || '';
-                    if (desc.indexOf('Trabajo de Calle') === 0) calle += precio;
-                    else if (desc.indexOf('Consumo Agua') === 0) agua += precio;
-                    else otros += precio;
+                    const desc = (it.desc || '').toLowerCase();
+                    if (desc.indexOf('calle') !== -1) {
+                        calle += precio;
+                    } else if (esDeAgua || desc.indexOf('agua') !== -1) {
+                        agua += precio;
+                    } else {
+                        otros += precio;
+                    }
                 });
+            } else if (esDeAgua) {
+                agua += (m.total || 0);
             } else {
-                // Ingresos manuales ("Registrar Entrada") no traen items: son ajenos al agua.
+                // Ingresos manuales ("Registrar Entrada") sin items y sin reciboId: son ajenos al agua.
                 otros += (m.total || 0);
             }
             return { agua, calle, otros };
@@ -733,6 +820,9 @@
             let outMes = 0;
             let aguaMes = 0, calleMes = 0, otrosMes = 0;
             const hoy = new Date();
+            const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+            const elMesActual = document.getElementById('dash-mes-actual');
+            if (elMesActual) elMesActual.innerText = meses[hoy.getMonth()] + ' ' + hoy.getFullYear();
 
             movimientos.forEach(m => {
                 const mDate = new Date(m.timestamp);
@@ -770,6 +860,7 @@
 
         function construirTarjetaMovimiento(m) {
             const isEntrada = m.tipo === 'entrada';
+            const esBoleta = !isEntrada && !!m.esBoletaPago;
             const conceptoDisplay = isEntrada ? m.concepto : m.recibe;
             // Los movimientos que vienen de un recibo de agua (index.html) traen reciboId.
             // Esos NO se pueden borrar desde Caja: hay que borrarlos desde el recibo en
@@ -779,7 +870,7 @@
             let htmlItems = '';
             if (!isEntrada && m.items && m.items.length > 0) {
                 htmlItems = `<div style="font-size:0.8rem; color:#546e7a; margin-top:8px; background:#f5f7fa; padding:8px; border-radius:6px;">
-                    ${m.items.map(i => `• ${i.desc} (x${i.cant})`).join('<br>')}
+                    ${m.items.map(i => `• ${i.desc}${i.precio < 0 ? ' (-$' + Math.abs(i.precio).toFixed(2) + ')' : ' ($' + (parseFloat(i.precio)||0).toFixed(2) + ')'}`).join('<br>')}
                 </div>`;
             }
 
@@ -795,16 +886,25 @@
             if (esDeAgua) {
                 notaCalle += `<div style="font-size:0.7rem; color:#1565c0; margin-top:2px;">💧 Viene del Sistema de Agua</div>`;
             }
+            if (esBoleta && m.boleta && m.boleta.cargo) {
+                notaCalle += `<div style="font-size:0.7rem; color:#6a1b9a; margin-top:2px;">🧑‍🔧 ${m.boleta.cargo} · ${m.boleta.periodo}</div>`;
+            } else if (esBoleta) {
+                notaCalle += `<div style="font-size:0.7rem; color:#6a1b9a; margin-top:2px;">🧑‍🔧 ${m.boleta.periodo}</div>`;
+            }
 
             const botonBorrar = esDeAgua
                 ? `<span title="Este movimiento viene de un recibo de agua. Bórralo desde el Sistema de Agua." style="width:auto; padding:6px 10px; margin:0; font-size:0.8rem; color:#b0bec5;">🔒</span>`
-                : `<button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="borrarMovimiento(${m.id})">🗑️</button>`;
+                : `<button class="btn-danger" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem; color:white;" onclick="borrarMovimiento(${m.id})">🗑️</button>`;
+
+            const botonBoleta = esBoleta
+                ? `<button class="btn-primary" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem; background:#6a1b9a; color:white;" onclick="imprimirBoletaPagoById(${m.id})">🧑‍🔧 Boleta</button>`
+                : '';
 
             return `
                 <div class="list-item">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
-                            <span class="badge ${isEntrada ? 'badge-in' : 'badge-out'}">${isEntrada ? 'INGRESO' : 'SALIDA'}</span>
+                            <span class="badge ${isEntrada ? 'badge-in' : 'badge-out'}">${isEntrada ? 'INGRESO' : (esBoleta ? 'BOLETA DE PAGO' : 'SALIDA')}</span>
                             <strong style="margin-left:5px; font-size:1.05rem;">${conceptoDisplay}</strong>
                             <div style="font-size:0.75rem; color:#b0bec5; margin-top:4px;">${m.fecha} • ${m.hora}</div>
                             ${notaCalle}
@@ -816,20 +916,270 @@
                         </div>
                     </div>
                     ${htmlItems}
-                    <div style="text-align:right; margin-top:12px; padding-top:10px; border-top:1px dashed #eceff1; display:flex; gap:10px; justify-content:flex-end; align-items:center;">
-                         <button class="btn-bt" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirBluetoothById(${m.id})">📱 Ticket</button>
-                         <button class="btn-primary" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem;" onclick="imprimirPDF(${m.id})">📄 PDF</button>
+                    <div style="text-align:right; margin-top:12px; padding-top:10px; border-top:1px dashed #eceff1; display:flex; gap:10px; justify-content:flex-end; align-items:center; flex-wrap:wrap;">
+                         <button class="btn-bt" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem; color:white;" onclick="imprimirBluetoothById(${m.id})">📱 Ticket</button>
+                         <button class="btn-primary" style="width:auto; padding:6px 12px; margin:0; font-size:0.8rem; color:white;" onclick="imprimirPDF(${m.id})">📄 PDF</button>
+                         ${botonBoleta}
                          ${botonBorrar}
                     </div>
                 </div>`;
         }
 
-        // Punto de entrada: aplica filtros y (re)inicia la paginación desde cero
+        // ================== BOLETA DE PAGO (empleados pagados desde Caja) ==================
+
+        function prepararFormularioBoleta() {
+            // Si el formulario está vacío (primera vez que se entra), le ponemos una fila
+            // de Devengo lista para usar ("Sueldo") para que no se vea vacío.
+            const cont = document.getElementById('bp-devengos-container');
+            if (cont && cont.children.length === 0) {
+                agregarFilaBoleta('devengos');
+            }
+        }
+
+        function agregarFilaBoleta(tipo) {
+            const contId = tipo === 'devengos' ? 'bp-devengos-container' : 'bp-deducciones-container';
+            const tbody = document.getElementById(contId);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" placeholder="Concepto..." class="bp-desc"></td>
+                <td><input type="number" placeholder="0.00" step="0.01" class="bp-monto" oninput="calcularTotalesBoleta()" onfocus="this.select()"></td>
+                <td style="text-align:center;"><button class="btn-remove-item" onclick="eliminarFilaBoleta(this)">×</button></td>`;
+            tbody.appendChild(tr);
+        }
+
+        function eliminarFilaBoleta(btn) {
+            btn.closest('tr').remove();
+            calcularTotalesBoleta();
+        }
+
+        function calcularTotalesBoleta() {
+            let devengado = 0, deducciones = 0;
+            document.querySelectorAll('#bp-devengos-container tr').forEach(row => {
+                devengado += parseFloat(row.querySelector('.bp-monto').value) || 0;
+            });
+            document.querySelectorAll('#bp-deducciones-container tr').forEach(row => {
+                deducciones += parseFloat(row.querySelector('.bp-monto').value) || 0;
+            });
+            const neto = devengado - deducciones;
+            document.getElementById('bp-total-devengado').innerText = '$' + devengado.toFixed(2);
+            document.getElementById('bp-total-deducciones').innerText = '$' + deducciones.toFixed(2);
+            document.getElementById('bp-neto-display').innerText = '$' + neto.toFixed(2);
+            return { devengado, deducciones, neto };
+        }
+
+        async function guardarBoletaPago() {
+            const nombre = document.getElementById('bp-nombre').value.trim();
+            const cargo = document.getElementById('bp-cargo').value.trim();
+            const periodo = document.getElementById('bp-periodo').value.trim();
+
+            if (!nombre) return alert('❌ Falta el nombre del empleado.');
+            if (!periodo) return alert('❌ Falta indicar el periodo pagado.');
+
+            const devengos = [];
+            document.querySelectorAll('#bp-devengos-container tr').forEach(row => {
+                const desc = row.querySelector('.bp-desc').value.trim();
+                const monto = parseFloat(row.querySelector('.bp-monto').value) || 0;
+                if (desc && monto > 0) devengos.push({ desc, monto });
+            });
+            const deducciones = [];
+            document.querySelectorAll('#bp-deducciones-container tr').forEach(row => {
+                const desc = row.querySelector('.bp-desc').value.trim();
+                const monto = parseFloat(row.querySelector('.bp-monto').value) || 0;
+                if (desc && monto > 0) deducciones.push({ desc, monto });
+            });
+
+            if (devengos.length === 0) return alert('❌ Agregue al menos un devengo (ej. "Sueldo").');
+
+            const totalDevengado = devengos.reduce((a, b) => a + b.monto, 0);
+            const totalDeducciones = deducciones.reduce((a, b) => a + b.monto, 0);
+            const neto = totalDevengado - totalDeducciones;
+
+            if (neto <= 0) return alert('❌ El neto a pagar debe ser mayor a $0.00 (revisa las deducciones).');
+            if (!confirm(`Se va a descontar $${neto.toFixed(2)} de Caja para pagarle a ${nombre}. ¿Confirmar?`)) return;
+
+            const fecha = new Date();
+            const nuevoMov = {
+                id: Date.now(),
+                tipo: 'salida',
+                fecha: fecha.toLocaleDateString('es-ES'),
+                hora: fecha.toLocaleTimeString('es-ES'),
+                timestamp: fecha.getTime(),
+                admin: config.admin,
+                concepto: 'Boleta de Pago: ' + nombre,
+                recibe: nombre,
+                total: neto,
+                esBoletaPago: true,
+                items: devengos.map(d => ({ desc: 'Devengo - ' + d.desc, cant: 1, precio: d.monto }))
+                    .concat(deducciones.map(d => ({ desc: 'Deducción - ' + d.desc, cant: 1, precio: -d.monto }))),
+                boleta: { nombre, cargo, periodo, devengos, deducciones, totalDevengado, totalDeducciones, neto }
+            };
+
+            if (typeof window.generarNumeroRecibo === 'function') {
+                try {
+                    const numInfo = await window.generarNumeroRecibo();
+                    nuevoMov.numeroRecibo = numInfo.numero;
+                    nuevoMov.numeroFormateado = numInfo.formateado;
+                    nuevoMov.numeroOrigen = numInfo.origen;
+                    nuevoMov.numeroPendiente = numInfo.pendiente;
+                } catch (e) { console.error('No se pudo generar número de recibo:', e); }
+            }
+
+            movimientos.push(nuevoMov);
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+            if (typeof syncMovimiento === 'function') syncMovimiento(nuevoMov);
+
+            generarPDFBoletaPago(nuevoMov);
+
+            // Limpiar formulario para la próxima boleta
+            document.getElementById('bp-nombre').value = '';
+            document.getElementById('bp-cargo').value = '';
+            document.getElementById('bp-periodo').value = '';
+            document.getElementById('bp-devengos-container').innerHTML = '';
+            document.getElementById('bp-deducciones-container').innerHTML = '';
+            agregarFilaBoleta('devengos');
+            calcularTotalesBoleta();
+
+            actualizarDashboard();
+            mostrarSeccion('dashboard');
+        }
+
+        // Genera el PDF formal de la Boleta de Pago (encabezado, devengos, deducciones, neto y firmas)
+        function generarPDFBoletaPago(mov) {
+            try {
+                const b = mov.boleta;
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const centerX = pageWidth / 2;
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text((config.admin || 'ACOMAACAP'), centerX, 16, { align: 'center' });
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.setTextColor(100);
+                doc.text('Asociación Comunal de Agua Cantón Las Piletas, Coatepeque', centerX, 21, { align: 'center' });
+                doc.setTextColor(0);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(13);
+                doc.text('BOLETA DE PAGO', centerX, 30, { align: 'center' });
+
+                doc.setDrawColor(0, 121, 107);
+                doc.setLineWidth(0.6);
+                doc.line(14, 34, pageWidth - 14, 34);
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(10);
+                let y = 42;
+                doc.setFont('helvetica', 'bold');
+                doc.text('Empleado:', 14, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(b.nombre, 40, y);
+                doc.text('No. Boleta: ' + (mov.numeroFormateado || ('#' + String(mov.id).slice(-6))), pageWidth - 14, y, { align: 'right' });
+                y += 6;
+
+                if (b.cargo) {
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Cargo:', 14, y);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(b.cargo, 40, y);
+                }
+                doc.text('Fecha de Pago: ' + mov.fecha, pageWidth - 14, y, { align: 'right' });
+                y += 6;
+
+                doc.setFont('helvetica', 'bold');
+                doc.text('Periodo Pagado:', 14, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(b.periodo, 48, y);
+                y += 10;
+
+                doc.autoTable({
+                    startY: y,
+                    head: [['DEVENGOS (Ingresos)', 'Monto']],
+                    body: b.devengos.map(d => [d.desc, `$${d.monto.toFixed(2)}`]),
+                    styles: { fontSize: 9, cellPadding: 2.5 },
+                    headStyles: { fillColor: [46, 125, 50] },
+                    columnStyles: { 1: { halign: 'right', cellWidth: 35 } },
+                    margin: { left: 14, right: 14 }
+                });
+                y = doc.lastAutoTable.finalY + 6;
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Total Devengado:  $${b.totalDevengado.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+                y += 10;
+
+                if (b.deducciones.length > 0) {
+                    doc.autoTable({
+                        startY: y,
+                        head: [['DEDUCCIONES (Descuentos)', 'Monto']],
+                        body: b.deducciones.map(d => [d.desc, `-$${d.monto.toFixed(2)}`]),
+                        styles: { fontSize: 9, cellPadding: 2.5 },
+                        headStyles: { fillColor: [198, 40, 40] },
+                        columnStyles: { 1: { halign: 'right', cellWidth: 35 } },
+                        margin: { left: 14, right: 14 }
+                    });
+                    y = doc.lastAutoTable.finalY + 6;
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`Total Deducciones:  -$${b.totalDeducciones.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+                    y += 10;
+                }
+
+                doc.setDrawColor(0, 121, 107);
+                doc.setLineWidth(0.6);
+                doc.line(14, y, pageWidth - 14, y);
+                y += 9;
+                doc.setFontSize(13);
+                doc.text(`NETO A PAGAR:  $${b.neto.toFixed(2)}`, pageWidth - 14, y, { align: 'right' });
+                y += 30;
+
+                if (y > pageHeight - 35) { doc.addPage(); y = 30; }
+
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+                doc.line(20, y, 90, y);
+                doc.line(pageWidth - 90, y, pageWidth - 20, y);
+                y += 5;
+                doc.text('Firma del Empleado', 55, y, { align: 'center' });
+                doc.text('Firma que Autoriza', pageWidth - 55, y, { align: 'center' });
+
+                const filename = `Boleta_Pago_${b.nombre.replace(/\s+/g, '_')}_${mov.fecha.replace(/\//g, '-')}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando la boleta de pago:', e);
+                alert('⚠️ No se pudo generar la boleta de pago: ' + e.message);
+            }
+        }
+
+        // Permite volver a descargar la boleta formal de un pago ya guardado, desde el Historial.
+        window.imprimirBoletaPagoById = function (id) {
+            const mov = movimientos.find(m => m.id === id);
+            if (!mov || !mov.boleta) { alert('No se encontró la información de esta boleta.'); return; }
+            generarPDFBoletaPago(mov);
+        };
+        // Permite tocar las tarjetas "INGRESOS"/"EGRESOS" del resumen para cambiar el filtro
+        // "Tipo" al instante, sin salir de la pantalla de Historial.
+        function filtrarHistorialPorTipo(tipo) {
+            const select = document.getElementById('filtro-tipo');
+            // Si ya estaba en ese tipo, lo regresamos a "Todos" (para poder des-seleccionar).
+            select.value = (select.value === tipo) ? 'todos' : tipo;
+            renderHistorial();
+        }
+
         function renderHistorial() {
             const fAnio = document.getElementById('filtro-anio').value;
             const fMes = document.getElementById('filtro-mes').value;
             const fDia = document.getElementById('filtro-dia').value;
             const fTipo = document.getElementById('filtro-tipo').value;
+
+            // Resaltar la tarjeta Ingresos/Egresos activa (o ninguna si Tipo = Todos)
+            const cajaIn = document.getElementById('hist-caja-ingresos');
+            const cajaOut = document.getElementById('hist-caja-egresos');
+            if (cajaIn) cajaIn.style.background = (fTipo === 'entrada') ? '#e8f5e9' : 'transparent';
+            if (cajaOut) cajaOut.style.background = (fTipo === 'salida') ? '#ffebee' : 'transparent';
 
             const div = document.getElementById('lista-movimientos');
             div.innerHTML = '';
@@ -837,16 +1187,17 @@
 
             const lista = [...movimientos].reverse();
 
-            // Filtramos una sola vez y calculamos los totales sobre TODO lo filtrado,
-            // no solo sobre lo que ya está pintado en pantalla.
+            // Los totales de Ingresos/Egresos/Agua/Calle/Otros son los REALES del periodo
+            // (Año/Mes/Día), sin importar el filtro "Tipo". Así, aunque filtres solo
+            // "Entradas" para ver la lista de abajo, arriba siempre ves el Egreso real de
+            // ese periodo (y no un $0.00 engañoso solo porque el filtro Tipo los oculta).
             let sumIn = 0, sumOut = 0;
             let sumAgua = 0, sumCalle = 0, sumOtros = 0;
-            historialFiltrados = lista.filter(m => {
+            lista.forEach(m => {
                 const mDate = new Date(m.timestamp);
-                if (fAnio !== 'todos' && mDate.getFullYear() != fAnio) return false;
-                if (fMes !== 'todos' && mDate.getMonth() != fMes) return false;
-                if (fDia !== 'todos' && mDate.getDate() != fDia) return false;
-                if (fTipo !== 'todos' && m.tipo !== fTipo) return false;
+                if (fAnio !== 'todos' && mDate.getFullYear() != fAnio) return;
+                if (fMes !== 'todos' && mDate.getMonth() != fMes) return;
+                if (fDia !== 'todos' && mDate.getDate() != fDia) return;
 
                 if (m.tipo === 'entrada') {
                     sumIn += m.total;
@@ -855,7 +1206,6 @@
                 } else {
                     sumOut += m.total;
                 }
-                return true;
             });
 
             document.getElementById('hist-total-in').innerText = '$' + sumIn.toFixed(2);
@@ -863,6 +1213,16 @@
             document.getElementById('hist-total-agua').innerText = '$' + sumAgua.toFixed(2);
             document.getElementById('hist-total-calle').innerText = '$' + sumCalle.toFixed(2);
             document.getElementById('hist-total-otros').innerText = '$' + sumOtros.toFixed(2);
+
+            // La lista de movimientos de abajo sí respeta el filtro "Tipo" (Entradas/Salidas/etc.)
+            historialFiltrados = lista.filter(m => {
+                const mDate = new Date(m.timestamp);
+                if (fAnio !== 'todos' && mDate.getFullYear() != fAnio) return false;
+                if (fMes !== 'todos' && mDate.getMonth() != fMes) return false;
+                if (fDia !== 'todos' && mDate.getDate() != fDia) return false;
+                if (fTipo !== 'todos' && m.tipo !== fTipo) return false;
+                return true;
+            });
 
             if (historialFiltrados.length === 0) {
                 div.innerHTML = lista.length === 0
@@ -1139,7 +1499,35 @@ function borrarTodo() {
 
             // Totales para el resumen
             let tIn=0, tOut=0;
-            movs.forEach(m => { const esIn = m.tipo === 'entrada'; if(esIn)tIn+=m.total; else tOut+=m.total; });
+            let tAgua = 0, tCalle = 0, tOtros = 0;
+            movs.forEach(m => {
+                const esIn = m.tipo === 'entrada';
+                if(esIn) {
+                    tIn += m.total;
+                    const { agua, calle, otros } = desglosarItemsMovimiento(m);
+                    tAgua += agua; tCalle += calle; tOtros += otros;
+                } else {
+                    tOut += m.total;
+                }
+            });
+
+            // El "Saldo Neto" de arriba es solo Ingresos-Egresos DEL PERIODO filtrado (día/mes/año),
+            // y puede salir negativo si ese día se pagó un vale grande con dinero que ya estaba
+            // acumulado de días anteriores. Eso NO significa que la caja se quedó en negativo.
+            // Por eso calculamos también el SALDO GLOBAL real de la caja, considerando TODOS los
+            // movimientos (de toda la historia) hasta el final del periodo del reporte.
+            let cutoff;
+            if (tipoReporte === 'diario') {
+                cutoff = new Date(aS, mS, dS, 23, 59, 59, 999);
+            } else if (tipoReporte === 'mensual') {
+                cutoff = new Date(aS, mS + 1, 0, 23, 59, 59, 999); // último día de ese mes
+            } else {
+                cutoff = new Date(aS, 11, 31, 23, 59, 59, 999); // 31 de diciembre de ese año
+            }
+            const saldoGlobal = movimientos.reduce((acc, m) => {
+                if (m.timestamp > cutoff.getTime()) return acc;
+                return acc + (m.tipo === 'entrada' ? m.total : -m.total);
+            }, 0);
 
             // ===== GENERACIÓN DE PDF REAL (texto vectorial, no imagen) =====
             try {
@@ -1179,13 +1567,29 @@ function borrarTodo() {
                 doc.setFontSize(9);
                 doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, 34);
                 doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, 34);
-                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, 34);
+                doc.text(`Saldo Neto del Periodo: $${(tIn - tOut).toFixed(2)}`, 130, 34);
+
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Saldo Global de Caja (a la fecha): $${saldoGlobal.toFixed(2)}`, 14, 39);
+                doc.setFont('helvetica', 'normal');
+
+                doc.setFontSize(8);
+                doc.setTextColor(80);
+                doc.text(`(De los Ingresos -> Agua: $${tAgua.toFixed(2)}   Calle: $${tCalle.toFixed(2)}   Otros: $${tOtros.toFixed(2)})`, 14, 44);
+                doc.setTextColor(0);
 
                 const filas = movs.map(m => {
                     const esIn = m.tipo === 'entrada';
+                    let concepto = esIn ? m.concepto : (m.items[0] ? m.items[0].desc : 'Gasto');
+                    if (esIn) {
+                        const { calle } = desglosarItemsMovimiento(m);
+                        if (calle > 0) {
+                            concepto += `\n(incluye $${calle.toFixed(2)} de Trabajo de Calle)`;
+                        }
+                    }
                     return [
                         `${m.fecha} ${m.hora}`,
-                        `${esIn ? 'INGRESO' : 'VALE'} - ${esIn ? m.concepto : (m.items[0] ? m.items[0].desc : 'Gasto')}`,
+                        `${esIn ? 'INGRESO' : 'VALE'} - ${concepto}`,
                         m.recibe || '-',
                         esIn ? `$${m.total.toFixed(2)}` : '-',
                         esIn ? '-' : `$${m.total.toFixed(2)}`
@@ -1193,7 +1597,7 @@ function borrarTodo() {
                 });
 
                 doc.autoTable({
-                    startY: 39,
+                    startY: 49,
                     head: [['Fecha', 'Concepto', 'Recibe/Entrega', 'Ingreso', 'Egreso']],
                     body: filas,
                     styles: { fontSize: 8, cellPadding: 2 },
@@ -1204,7 +1608,7 @@ function borrarTodo() {
                 // --- Totales al final del documento ---
                 const pageHeight = doc.internal.pageSize.getHeight();
                 let finalY = doc.lastAutoTable.finalY + 12;
-                if (finalY + 22 > pageHeight - 15) {
+                if (finalY + 36 > pageHeight - 15) {
                     doc.addPage();
                     finalY = 20;
                 }
@@ -1220,9 +1624,18 @@ function borrarTodo() {
                 doc.setFontSize(9);
                 doc.text(`Ingresos:  $${tIn.toFixed(2)}`, 14, finalY);
                 doc.text(`Egresos:   $${tOut.toFixed(2)}`, 70, finalY);
+                doc.text(`Saldo Neto del Periodo: $${(tIn - tOut).toFixed(2)}`, 130, finalY);
+                finalY += 6;
+
                 doc.setFont('helvetica', 'bold');
-                doc.text(`Saldo Neto: $${(tIn - tOut).toFixed(2)}`, 130, finalY);
+                doc.text(`Saldo Global de Caja (a la fecha): $${saldoGlobal.toFixed(2)}`, 14, finalY);
                 doc.setFont('helvetica', 'normal');
+                finalY += 6;
+
+                doc.setFontSize(8);
+                doc.setTextColor(80);
+                doc.text(`Desglose de Ingresos  ->  Agua: $${tAgua.toFixed(2)}   |   Calle: $${tCalle.toFixed(2)}   |   Otros: $${tOtros.toFixed(2)}`, 14, finalY);
+                doc.setTextColor(0);
 
                 const filename = `Reporte_${tipoReporte}_${aS}.pdf`;
                 if (typeof Android !== 'undefined' && Android.guardarArchivo) {
