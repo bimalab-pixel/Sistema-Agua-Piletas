@@ -298,8 +298,8 @@
         </div>
 
         <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <button type="button" id="tab-btn-pagados" class="btn-bt" onclick="mostrarTabRecaudacion('pagados')" style="margin:0; flex:1; background:#2e7d32; font-size:0.95rem; padding:12px;">✅ Pagados</button>
-            <button type="button" id="tab-btn-deben" class="btn-bt" onclick="mostrarTabRecaudacion('deben')" style="margin:0; flex:1; background:#c62828; opacity:0.55; font-size:0.95rem; padding:12px;">⏳ Deben</button>
+            <button type="button" id="tab-btn-pagados" class="btn btn-bt" onclick="mostrarTabRecaudacion('pagados')" style="margin:0; flex:1; background:#2e7d32; font-size:0.95rem; padding:12px;">✅ Pagados</button>
+            <button type="button" id="tab-btn-deben" class="btn btn-bt" onclick="mostrarTabRecaudacion('deben')" style="margin:0; flex:1; background:#c62828; opacity:0.55; font-size:0.95rem; padding:12px;">⏳ Deben</button>
         </div>
 
         <div id="rec-lista-contenedor" style="background:white; border:1px solid #eee; border-radius:10px; max-height:320px; overflow-y:auto; font-size:0.95rem;"></div>
@@ -307,13 +307,53 @@
         <div style="margin-top:16px;">
             <label style="font-size:0.9rem;">🖨️ Imprimir listado (PDF)</label>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('pagados')" style="margin:0; flex:1; min-width:100px; background:#2e7d32; font-size:0.82rem; padding:10px 6px;">✅ Pagados</button>
-                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('deben')" style="margin:0; flex:1; min-width:100px; background:#c62828; font-size:0.82rem; padding:10px 6px;">⏳ Deben</button>
-                <button type="button" class="btn-bt" onclick="generarPDFRecaudacion('general')" style="margin:0; flex:1; min-width:100px; background:#0288d1; font-size:0.82rem; padding:10px 6px;">📋 General</button>
+                <button type="button" class="btn btn-bt" onclick="generarPDFRecaudacion('pagados')" style="margin:0; flex:1; min-width:100px; background:#2e7d32; font-size:0.82rem; padding:10px 6px;">✅ Pagados</button>
+                <button type="button" class="btn btn-bt" onclick="generarPDFRecaudacion('deben')" style="margin:0; flex:1; min-width:100px; background:#c62828; font-size:0.82rem; padding:10px 6px;">⏳ Deben</button>
+                <button type="button" class="btn btn-bt" onclick="generarPDFRecaudacion('general')" style="margin:0; flex:1; min-width:100px; background:#0288d1; font-size:0.82rem; padding:10px 6px;">📋 General</button>
             </div>
         </div>
 
-        <button type="button" class="btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:14px;">Cerrar</button>
+        <button type="button" class="btn btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:14px;">Cerrar</button>
+    </div>
+</div>
+
+<!-- ===== MODAL: LISTADO DE USUARIOS (Nombre, Contador, Última Lectura) ===== -->
+<div id="modal-listado-usuarios" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; align-items:center; justify-content:center; padding:15px;">
+    <div style="background:white; border-radius:16px; max-width:640px; width:100%; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:94vh; overflow-y:auto;">
+        <h3 style="margin:0 0 4px; text-align:center; font-size:1.3rem;">📋 Listado de Usuarios</h3>
+        <p style="text-align:center; color:#888; font-size:0.85rem; margin:0 0 16px;">Nombre completo, N° de contador y última lectura registrada</p>
+
+        <label style="font-size:0.9rem;">Caserío</label>
+        <select id="lu-filtro-caserio" onchange="renderizarListadoUsuarios()" style="margin-bottom:10px;">
+            <option value="todos">Todos los caseríos</option>
+            <option value="Los Planes">Los Planes</option>
+            <option value="Piletas">Piletas</option>
+            <option value="Santa Rosa">Santa Rosa</option>
+            <option value="Venecia">Venecia</option>
+        </select>
+
+        <input type="text" id="lu-input-buscar" placeholder="Buscar por nombre o contador..." onkeyup="renderizarListadoUsuarios()" style="margin-bottom:14px;">
+
+        <div id="lu-contador-resultado" style="text-align:center; color:#777; font-size:0.82rem; margin-bottom:8px;"></div>
+
+        <div style="background:white; border:1px solid #eee; border-radius:10px; max-height:360px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                <thead>
+                    <tr style="background:#f3f4f6; position:sticky; top:0;">
+                        <th style="text-align:left; padding:8px 10px;">Nombre</th>
+                        <th style="text-align:left; padding:8px 10px;">Contador</th>
+                        <th style="text-align:right; padding:8px 10px;">Últ. Lectura</th>
+                    </tr>
+                </thead>
+                <tbody id="lu-tabla-body"></tbody>
+            </table>
+        </div>
+
+        <div style="margin-top:16px;">
+            <button type="button" class="btn btn-danger" onclick="generarPDFListadoUsuarios()">🖨️ Imprimir / Exportar PDF</button>
+        </div>
+
+        <button type="button" class="btn btn-outline" onclick="cerrarModalListadoUsuarios()" style="margin-top:10px;">Cerrar</button>
     </div>
 </div>
 </div>
@@ -444,6 +484,8 @@
             </div>
 
             <div id="resultados-globales"></div>
+
+            <button type="button" class="btn btn-primary" onclick="abrirModalListadoUsuarios()">📋 Listado de Usuarios (Ver / Imprimir PDF)</button>
 
             <div style="margin: 25px 0 15px; text-align:center; color:#999; font-size:0.85rem;">— o selecciona por caserío —</div>
         </div>
@@ -1335,7 +1377,7 @@
                             <span style="color:#666; font-size:0.9rem;">Contador: <strong>${u.contador}</strong></span>
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                             <button class="btn-bt" style="margin:0; padding:10px; font-size:0.9rem;" onclick="mostrarPerfilUsuario(${u.id})">👁️ Historial</button>
+                             <button class="btn btn-bt" style="margin:0; padding:10px; font-size:0.9rem;" onclick="mostrarPerfilUsuario(${u.id})">👁️ Historial</button>
                              <button class="btn-outline" style="margin:0; padding:10px; font-size:0.9rem;" onclick="iniciarFacturaUsuario(${u.id})">🧾 Facturar</button>
                         </div>
                         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
@@ -1429,7 +1471,7 @@
                         ${!pag ? '' : `<small>${r.fecha}</small>`}
                     </div>
                     <div style="text-align:right; margin-top:8px;">
-                        <button class="btn-bt" onclick="imprimirBluetooth(${r.id})" style="width:auto; display:inline-block; padding:5px 10px; margin:0; font-size:0.8rem;">📱</button>
+                        <button class="btn btn-bt" onclick="imprimirBluetooth(${r.id})" style="width:auto; display:inline-block; padding:5px 10px; margin:0; font-size:0.8rem;">📱</button>
                         <button class="btn-primary" onclick="imprimirPDF(${r.id})" style="width:auto; display:inline-block; padding:5px 10px; margin:0; font-size:0.8rem;">📄</button>
                     </div>
                 </div>`;
@@ -2028,7 +2070,118 @@
             }
         }
 
-        // ================= MÓDULO "TRABAJO DE CALLE" =================
+        // ================= MODAL: LISTADO DE USUARIOS =================
+        function calcularUltimaLecturaUsuario(u) {
+            // Misma lógica reforzada usada en la exportación Lite: busca la última
+            // lectura real en los recibos del usuario; si no hay, usa u.ultimaLectura.
+            const usuarioIdNum = parseInt(u.id);
+            const recibosUsuario = recibos.filter(r =>
+                (parseInt(r.usuarioId) === usuarioIdNum) &&
+                (parseFloat(r.lecturaActual) > 0)
+            );
+
+            let ultimaLecturaReal = 0;
+            if (recibosUsuario.length > 0) {
+                recibosUsuario.sort((a, b) => parseInt(b.id) - parseInt(a.id));
+                ultimaLecturaReal = parseFloat(recibosUsuario[0].lecturaActual);
+            }
+            if (ultimaLecturaReal === 0 || isNaN(ultimaLecturaReal)) {
+                ultimaLecturaReal = parseFloat(u.ultimaLectura) || 0;
+            }
+            return ultimaLecturaReal;
+        }
+
+        function abrirModalListadoUsuarios() {
+            document.getElementById('lu-filtro-caserio').value = 'todos';
+            document.getElementById('lu-input-buscar').value = '';
+            document.getElementById('modal-listado-usuarios').style.display = 'flex';
+            registrarPasoAtras(() => cerrarModalListadoUsuarios());
+            renderizarListadoUsuarios();
+        }
+
+        function cerrarModalListadoUsuarios() {
+            document.getElementById('modal-listado-usuarios').style.display = 'none';
+        }
+
+        function obtenerListadoUsuariosFiltrado() {
+            const caserio = document.getElementById('lu-filtro-caserio').value;
+            const filtro = (document.getElementById('lu-input-buscar').value || '').toLowerCase().trim();
+
+            return usuarios
+                .filter(u => caserio === 'todos' || u.direccion === caserio)
+                .filter(u => !filtro ||
+                    (u.nombre || '').toLowerCase().includes(filtro) ||
+                    String(u.contador || '').toLowerCase().includes(filtro))
+                .map(u => ({
+                    nombre: u.nombre || '',
+                    contador: u.contador || '',
+                    direccion: u.direccion || '',
+                    ultimaLectura: calcularUltimaLecturaUsuario(u)
+                }))
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
+
+        function renderizarListadoUsuarios() {
+            const lista = obtenerListadoUsuariosFiltrado();
+            const tbody = document.getElementById('lu-tabla-body');
+            const resumen = document.getElementById('lu-contador-resultado');
+
+            resumen.innerText = `${lista.length} usuario${lista.length === 1 ? '' : 's'} encontrado${lista.length === 1 ? '' : 's'}`;
+
+            if (lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999; padding:16px;">No hay usuarios que coincidan.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = lista.map(u => `
+                <tr style="border-bottom:1px solid #f0f0f0;">
+                    <td style="padding:8px 10px;">${u.nombre}<br><small style="color:#888;">${u.direccion}</small></td>
+                    <td style="padding:8px 10px;">${u.contador}</td>
+                    <td style="padding:8px 10px; text-align:right; font-weight:700;">${u.ultimaLectura}</td>
+                </tr>`).join('');
+        }
+
+        function generarPDFListadoUsuarios() {
+            try {
+                const lista = obtenerListadoUsuariosFiltrado();
+                const caserio = document.getElementById('lu-filtro-caserio').value;
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('ACOMAACAP - Listado de Usuarios', 14, 15);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Caserío: ${caserio}  |  Total: ${lista.length} usuarios`, 14, 22);
+                doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 27);
+
+                const filas = lista.map(u => [u.nombre, u.contador, u.direccion, String(u.ultimaLectura)]);
+
+                doc.autoTable({
+                    startY: 32,
+                    head: [['Nombre Completo', 'Contador', 'Caserío', 'Última Lectura']],
+                    body: filas.length ? filas : [['—', '—', '—', '—']],
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    headStyles: { fillColor: [2, 136, 209] },
+                    margin: { left: 14, right: 14 }
+                });
+
+                const filename = `Listado_Usuarios_${Date.now()}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                    alert(`✅ PDF generado:\n${filename}`);
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando el PDF del listado de usuarios:', e);
+                alert('⚠️ No se pudo generar el PDF: ' + e.message);
+            }
+        }
+
+
         let caserioCalleSeleccionado = null;
 
         function abrirCaserioCalle(nombre) {
@@ -2498,7 +2651,7 @@
                             ${parseFloat(r.extra) > 0 ? `<div style="font-size:0.7rem; color:#e65100;">🚧 incl. $${parseFloat(r.extra).toFixed(2)} Trabajo de Calle</div>` : ''}
                         </div>
                         <div style="display:flex; gap:8px;">
-                            <button class="btn-bt" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto; color:white;" onclick="imprimirBluetooth(${r.id})">📱</button>
+                            <button class="btn btn-bt" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto; color:white;" onclick="imprimirBluetooth(${r.id})">📱</button>
                             <button class="btn-primary" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto;" onclick="imprimirPDF(${r.id})">📄</button>
                             <button class="btn-danger" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto;" onclick="eliminarRecibo(${r.id})">🗑️</button>
                         </div>
