@@ -378,9 +378,13 @@
                 <span class="card-icon">📊</span>
                 <span class="card-label">Ingresos</span>
             </div>
+            <div class="card card-red card-centrado" onclick="mostrarSeccion('fondos-calle')">
+                <span class="card-icon">🚧</span>
+                <span class="card-label">Fondos Calle</span>
+            </div>
             <div class="card card-dark card-centrado" onclick="irACaja()" style="grid-column: 1 / -1;">
-                <span class="card-icon">📦</span>
-                <span class="card-label">CAJA</span>
+                <span class="card-icon" style="font-size: 3.6rem;">📦</span>
+                <span class="card-label" style="font-size: 1.15rem;">CAJA</span>
             </div>
         </div>
     </div>
@@ -415,6 +419,10 @@
             <div class="card card-red" onclick="mostrarSeccion('calle')">
                 <span class="card-icon">🚧</span>
                 <span class="card-label">Trabajo de Calle</span>
+            </div>
+            <div class="card card-red" onclick="mostrarSeccion('fondos-calle')">
+                <span class="card-icon">📋</span>
+                <span class="card-label">Fondos Calle</span>
             </div>
         </div>
         <div class="card card-dark" onclick="mostrarSeccion('ajustes')" style="display:flex; align-items:center; gap:15px;">
@@ -770,13 +778,103 @@
         </div>
 
         <div class="card card-green" style="text-align: center; border-left:none; border-top: 6px solid var(--secondary);">
-            <p style="margin:0; color:#666; font-size:0.8rem; text-transform:uppercase;">Recaudado</p>
+            <p style="margin:0; color:#666; font-size:0.8rem; text-transform:uppercase;">Recaudado Global (Agua + Calle)</p>
             <div style="font-size: 3rem; font-weight: 800; color: var(--secondary); margin: 5px 0;" id="cont-total-periodo">$0.00</div>
             <p style="margin:0; font-size:0.8rem; color:#888;" id="cont-texto-periodo">Seleccione filtros</p>
         </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0 10px;">
+            <div onclick="mostrarDetalleTipoIngreso('agua')" style="background:#e3f2fd; border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer;">
+                <div style="font-size:0.75rem; font-weight:700; color:#1565c0;">💧 SOLO AGUA</div>
+                <div id="cont-total-agua" style="font-size:1.3rem; font-weight:800; color:#1565c0;">$0.00</div>
+                <div style="font-size:0.65rem; color:#1565c0; margin-top:3px;">Toque para ver detalle</div>
+            </div>
+            <div onclick="mostrarDetalleTipoIngreso('calle')" style="background:#fff3e0; border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer;">
+                <div style="font-size:0.75rem; font-weight:700; color:#e65100;">🚧 SOLO CALLE</div>
+                <div id="cont-total-calle" style="font-size:1.3rem; font-weight:800; color:#e65100;">$0.00</div>
+                <div style="font-size:0.65rem; color:#e65100; margin-top:3px;">Toque para ver detalle</div>
+            </div>
+        </div>
+
+        <div onclick="mostrarDetalleTipoIngreso('ambos')" style="background:#e8f5e9; border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer; margin-bottom:20px;">
+            <div style="font-size:0.75rem; font-weight:700; color:#2e7d32;">💧🚧 AGUA + CALLE (TODOS)</div>
+            <div style="font-size:1.3rem; font-weight:800; color:#2e7d32;" id="cont-total-ambos">$0.00</div>
+            <div style="font-size:0.65rem; color:#2e7d32; margin-top:3px;">Toque para ver detalle</div>
+        </div>
+
+        <div id="cont-detalle-panel" style="display:none; margin-bottom:20px; border-radius:10px; overflow:hidden; border:1px solid #eee;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f5f5f5;">
+                <strong id="cont-detalle-titulo" style="font-size:0.92rem;"></strong>
+                <span onclick="cerrarDetalleTipoIngreso()" style="cursor:pointer; font-size:1.1rem; color:#888;">✖️</span>
+            </div>
+            <table style="margin:0;">
+                <thead><tr><th>Fecha</th><th>Cliente</th><th>Monto</th></tr></thead>
+                <tbody id="cont-detalle-tabla"></tbody>
+            </table>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#fafafa; font-weight:800; border-top:2px solid #ddd;">
+                <span>Total</span>
+                <span id="cont-detalle-total">$0.00</span>
+            </div>
+            <div style="padding:10px 12px;">
+                <button class="btn btn-primary" style="width:100%;" onclick="imprimirDetalleTipoIngreso()">🖨️ Imprimir / Guardar PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="fondos-calle" class="section">
+        <h2>🚧 Fondos de Calle y Otros</h2>
+        <p style="margin:-10px 0 15px; color:#888; font-size:0.82rem;">
+            Cargos que NO son facturación de agua (Trabajo de Calle y otros cargos extra).
+            Se reportan aparte para no mezclarse con la recaudación neta del agua.
+        </p>
+
+        <div class="filter-bar" style="background:#fff3e0; border: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+            <div style="grid-column: span 3; margin-bottom: 5px;">
+                <label style="color:#e65100; font-size: 0.9rem;">Periodo a Consultar:</label>
+            </div>
+
+            <select id="fc-anio" onchange="actualizarFondosCalle()"></select>
+
+            <select id="fc-mes" onchange="actualizarFondosCalle()">
+                <option value="todos">Todo el Año</option>
+                <option value="1">Ene</option> <option value="2">Feb</option> <option value="3">Mar</option>
+                <option value="4">Abr</option> <option value="5">May</option> <option value="6">Jun</option>
+                <option value="7">Jul</option> <option value="8">Ago</option> <option value="9">Sep</option>
+                <option value="10">Oct</option> <option value="11">Nov</option> <option value="12">Dic</option>
+            </select>
+
+            <select id="fc-dia" onchange="actualizarFondosCalle()">
+                <option value="todos">Todo el Mes</option>
+            </select>
+        </div>
+
+        <div style="margin:14px 0 5px;">
+            <label style="font-size:0.9rem;">Caserío (aplica solo al detalle de abajo)</label>
+            <select id="fc-caserio" onchange="actualizarFondosCalle()">
+                <option value="todos">Todos los caseríos (Global)</option>
+                <option value="Los Planes">Los Planes</option>
+                <option value="Piletas">Piletas</option>
+                <option value="Santa Rosa">Santa Rosa</option>
+                <option value="Venecia">Venecia</option>
+            </select>
+        </div>
+
+        <div class="card card-red" style="text-align: center; border-left:none; border-top: 6px solid #e65100;">
+            <p style="margin:0; color:#666; font-size:0.8rem; text-transform:uppercase;">Fondos de Calle (Global)</p>
+            <div style="font-size: 3rem; font-weight: 800; color: #e65100; margin: 5px 0;" id="fc-total-periodo">$0.00</div>
+            <p style="margin:0; font-size:0.8rem; color:#888;" id="fc-texto-periodo">Seleccione filtros</p>
+        </div>
+
+        <h4 style="margin:20px 0 10px;">📍 Desglose por Caserío (mismo periodo)</h4>
         <table>
-            <thead><tr><th>Fecha</th><th>Cliente</th><th>Monto</th></tr></thead>
-            <tbody id="tabla-contabilidad"></tbody>
+            <thead><tr><th>Caserío</th><th>Monto</th></tr></thead>
+            <tbody id="fc-tabla-caserios"></tbody>
+        </table>
+
+        <h4 style="margin:20px 0 10px;">🧾 Detalle de Movimientos <span style="font-weight:normal; font-size:0.78rem; color:#888;">(según caserío elegido arriba)</span></h4>
+        <table>
+            <thead><tr><th>Fecha</th><th>Cliente</th><th>Caserío</th><th>Monto</th></tr></thead>
+            <tbody id="fc-tabla-detalle"></tbody>
         </table>
     </div>
 
@@ -1136,6 +1234,7 @@
 
             // Si llegamos aquí, la navegación es directa o la contraseña fue correcta
             if(id === 'contabilidad') { cargarFiltrosContabilidad(); actualizarResumenContable(); }
+            if(id === 'fondos-calle') { cargarFiltrosFondosCalle(); }
         }
 
         // Botón 🏠 : va directo al menú principal y descarta toda la pila de retroceso
@@ -2894,12 +2993,17 @@
             const cM = document.getElementById('cont-mes').value;
             const cD = document.getElementById('cont-dia').value;
 
-            let total = 0;
-            const tbody = document.getElementById('tabla-contabilidad');
-            tbody.innerHTML = '';
+            let totalAgua = 0;
+            let totalCalle = 0;
+
+            // Guardamos el detalle línea por línea de cada tipo (Solo Agua / Solo Calle / Ambos)
+            // para mostrarlo en el panel de pantalla y para exportar a PDF, sin duplicar
+            // ninguna otra lista en la sección de Ingresos.
+            detalleAguaActual = [];
+            detalleCalleActual = [];
+            detalleAmbosActual = [];
 
             // Filtramos y procesamos
-            // Usamos [...contabilidad].reverse() para mostrar primero las transacciones más recientes
             [...contabilidad].reverse().forEach(c => {
                 const f = obtenerMesAnio(c.fecha);
 
@@ -2915,24 +3019,251 @@
                 // 3. Filtro de Día (si no es 'todos')
                 if (cD !== 'todos' && diaTransaccion != cD) return;
 
-                // Si pasa los filtros, sumamos
-                total += c.monto;
-                tbody.innerHTML += `
-                    <tr>
-                        <td data-label="Fecha">${c.fecha}</td>
-                        <td data-label="Cliente">${c.cliente}</td>
-                        <td data-label="Monto" style="font-weight:bold; color:var(--secondary);">$${c.monto.toFixed(2)}</td>
-                    </tr>`;
+                // Separamos Agua vs Calle de cada movimiento (cruzando con el recibo original),
+                // pero aquí SÍ sumamos ambos para dar el Total Global. El desglose se muestra
+                // aparte (tarjetas Solo Agua / Solo Calle) para que no se pierda la claridad.
+                const { montoAgua, montoCalle } = obtenerDesgloseMovimiento(c);
+                totalAgua += montoAgua;
+                totalCalle += montoCalle;
+
+                if (montoAgua > 0) detalleAguaActual.push({ fecha: c.fecha, cliente: c.cliente, monto: montoAgua });
+                if (montoCalle > 0) detalleCalleActual.push({ fecha: c.fecha, cliente: c.cliente, monto: montoCalle });
+
+                // "Ambos": una sola fila por movimiento, tal como se cobró (agua, o agua + calle)
+                const montoTotalMov = montoAgua + montoCalle;
+                if (montoTotalMov > 0) {
+                    detalleAmbosActual.push({ fecha: c.fecha, cliente: c.cliente, monto: montoTotalMov, montoAgua, montoCalle });
+                }
             });
 
-            // Actualizar Total Grande
-            document.getElementById('cont-total-periodo').innerText = '$' + total.toFixed(2);
+            const totalGlobal = totalAgua + totalCalle;
+
+            // Actualizar Total Grande (Global = Agua + Calle) y el desglose
+            document.getElementById('cont-total-periodo').innerText = '$' + totalGlobal.toFixed(2);
+            document.getElementById('cont-total-agua').innerText = '$' + totalAgua.toFixed(2);
+            document.getElementById('cont-total-calle').innerText = '$' + totalCalle.toFixed(2);
+            document.getElementById('cont-total-ambos').innerText = '$' + totalGlobal.toFixed(2);
 
             // Actualizar Texto descriptivo
             let mName = cM === 'todos' ? "Todo el Año" : document.querySelector(`#cont-mes option[value="${cM}"]`).innerText;
             let dName = cD === 'todos' ? "" : `(Día ${cD})`;
 
-            document.getElementById('cont-texto-periodo').innerText = `Reporte: ${mName} ${cA} ${dName}`;
+            cetiquetaPeriodoContable = `${mName} ${cA} ${dName}`.trim();
+            document.getElementById('cont-texto-periodo').innerText = `Reporte: ${cetiquetaPeriodoContable}`;
+
+            // Si el panel de detalle ya estaba abierto, lo refrescamos con los nuevos filtros
+            if (contDetalleTipoAbierto) mostrarDetalleTipoIngreso(contDetalleTipoAbierto);
+        }
+
+        // ================== DETALLE "SOLO AGUA" / "SOLO CALLE" / "AGUA + CALLE" (ver en pantalla e imprimir PDF) ==================
+        // Cada botón muestra exactamente su propio listado (sin mezclarse con los otros) en un
+        // único panel en pantalla, y el mismo listado se puede exportar a PDF con el total
+        // siempre como última fila del documento.
+        let detalleAguaActual = [];
+        let detalleCalleActual = [];
+        let detalleAmbosActual = [];
+        let contDetalleTipoAbierto = null;
+        let cetiquetaPeriodoContable = '';
+
+        function datosDetalleTipo(tipo) {
+            if (tipo === 'agua') return { lista: detalleAguaActual, color: '#1565c0', colorRGB: [21, 101, 192], titulo: '💧 Detalle - Solo Agua' };
+            if (tipo === 'calle') return { lista: detalleCalleActual, color: '#e65100', colorRGB: [230, 81, 0], titulo: '🚧 Detalle - Solo Calle' };
+            return { lista: detalleAmbosActual, color: 'var(--secondary)', colorRGB: [46, 125, 50], titulo: '💧🚧 Detalle - Agua + Calle (todos)' };
+        }
+
+        function mostrarDetalleTipoIngreso(tipo) {
+            contDetalleTipoAbierto = tipo;
+            const { lista, color, titulo } = datosDetalleTipo(tipo);
+
+            document.getElementById('cont-detalle-titulo').innerText = titulo;
+            document.getElementById('cont-detalle-titulo').style.color = color;
+
+            const tbody = document.getElementById('cont-detalle-tabla');
+            let total = 0;
+            if (lista.length) {
+                tbody.innerHTML = lista.map(item => {
+                    total += item.monto;
+                    const nota = (tipo === 'ambos' && item.montoCalle > 0)
+                        ? `<br><small style="font-weight:normal;color:#e65100;">(Agua $${item.montoAgua.toFixed(2)} + Calle $${item.montoCalle.toFixed(2)})</small>`
+                        : '';
+                    return `<tr>
+                        <td data-label="Fecha">${item.fecha}</td>
+                        <td data-label="Cliente">${item.cliente}</td>
+                        <td data-label="Monto" style="font-weight:bold; color:${color};">$${item.monto.toFixed(2)}${nota}</td>
+                    </tr>`;
+                }).join('');
+            } else {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">Sin movimientos en este periodo</td></tr>`;
+            }
+            const totalEl = document.getElementById('cont-detalle-total');
+            totalEl.innerText = '$' + total.toFixed(2);
+            totalEl.style.color = color;
+
+            document.getElementById('cont-detalle-panel').style.display = 'block';
+            document.getElementById('cont-detalle-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function cerrarDetalleTipoIngreso() {
+            contDetalleTipoAbierto = null;
+            document.getElementById('cont-detalle-panel').style.display = 'none';
+        }
+
+        function imprimirDetalleTipoIngreso() {
+            try {
+                const tipo = contDetalleTipoAbierto;
+                if (!tipo) return;
+                const { lista, colorRGB } = datosDetalleTipo(tipo);
+                const nombreTipo = tipo === 'agua' ? 'Solo Agua' : (tipo === 'calle' ? 'Solo Calle' : 'Agua y Calle');
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(14);
+                doc.text('ACOMAACAP - Ingresos', 14, 15);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Detalle: ${nombreTipo}  |  Periodo: ${cetiquetaPeriodoContable}`, 14, 22);
+
+                const total = lista.reduce((a, item) => a + item.monto, 0);
+                const filas = lista.map(item => {
+                    const notaCalle = (tipo === 'ambos' && item.montoCalle > 0) ? ` (Agua $${item.montoAgua.toFixed(2)} + Calle $${item.montoCalle.toFixed(2)})` : '';
+                    return [item.fecha, item.cliente, `$${item.monto.toFixed(2)}${notaCalle}`];
+                });
+
+                doc.autoTable({
+                    startY: 28,
+                    head: [['Fecha', 'Cliente', 'Monto']],
+                    body: filas.length ? filas : [['—', '—', '—']],
+                    foot: [['', 'TOTAL', `$${total.toFixed(2)}`]],
+                    showFoot: 'lastPage',
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    headStyles: { fillColor: colorRGB },
+                    footStyles: { fillColor: [240, 240, 240], textColor: 20, fontStyle: 'bold' },
+                    margin: { left: 14, right: 14 }
+                });
+
+                const filename = `Ingresos_${nombreTipo.replace(/\s+/g, '')}_${Date.now()}.pdf`;
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando el PDF de detalle de ingresos:', e);
+                alert('⚠️ No se pudo generar el PDF: ' + e.message);
+            }
+        }
+
+        // ================== FONDOS DE CALLE (y otros cargos ajenos al agua) ==================
+        // Reutiliza los mismos registros de "contabilidad" (generados al cobrar un recibo),
+        // pero separa únicamente la parte de Trabajo de Calle / cargos extra, cruzando cada
+        // movimiento con su recibo original (recibos) para conocer el monto extra y el caserío.
+        // Así funciona también con movimientos ya guardados anteriormente (no requiere migrar datos).
+
+        function obtenerDesgloseMovimiento(c) {
+            const recibo = recibos.find(r => r.id === c.reciboId);
+            const extra = recibo ? (parseFloat(recibo.extra) || 0) : 0;
+            const montoCalle = Math.min(extra, c.monto || 0);
+            const montoAgua = (c.monto || 0) - montoCalle;
+            return {
+                montoAgua,
+                montoCalle,
+                caserio: recibo ? (recibo.direccion || 'Sin caserío') : 'Sin caserío',
+                detalle: recibo ? (recibo.extraDetalle || '') : '',
+                recibo
+            };
+        }
+
+        function cargarFiltrosFondosCalle() {
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            const currentDay = today.getDate();
+
+            const selectAnio = document.getElementById('fc-anio');
+            selectAnio.innerHTML = `<option value="${currentYear}">${currentYear}</option><option value="${currentYear-1}">${currentYear-1}</option>`;
+            selectAnio.value = currentYear;
+
+            document.getElementById('fc-mes').value = currentMonth;
+
+            const selectDia = document.getElementById('fc-dia');
+            let htmlDias = '<option value="todos">Todo el Mes</option>';
+            for (let i = 1; i <= 31; i++) htmlDias += `<option value="${i}">${i}</option>`;
+            selectDia.innerHTML = htmlDias;
+            selectDia.value = currentDay;
+
+            document.getElementById('fc-caserio').value = 'todos';
+
+            actualizarFondosCalle();
+        }
+
+        function actualizarFondosCalle() {
+            const cA = document.getElementById('fc-anio').value;
+            const cM = document.getElementById('fc-mes').value;
+            const cD = document.getElementById('fc-dia').value;
+            const caserioFiltro = document.getElementById('fc-caserio').value;
+
+            const CASERIOS = ['Los Planes', 'Piletas', 'Santa Rosa', 'Venecia'];
+            const totalesCaserio = { 'Los Planes': 0, 'Piletas': 0, 'Santa Rosa': 0, 'Venecia': 0, 'Sin caserío': 0 };
+            let totalGlobal = 0;
+            const movimientosDelPeriodo = [];
+
+            contabilidad.forEach(c => {
+                if (!c.fecha) return;
+                const f = obtenerMesAnio(c.fecha);
+                const diaTransaccion = parseInt(c.fecha.split('/')[0]);
+
+                if (f.anio != cA) return;
+                if (cM !== 'todos' && f.mes != cM) return;
+                if (cD !== 'todos' && diaTransaccion != cD) return;
+
+                const { montoCalle, caserio, detalle } = obtenerDesgloseMovimiento(c);
+                if (montoCalle <= 0) return; // este movimiento fue solo agua, no aplica aquí
+
+                totalGlobal += montoCalle;
+                totalesCaserio[caserio] = (totalesCaserio[caserio] || 0) + montoCalle;
+                movimientosDelPeriodo.push({ ...c, montoCalle, caserio, detalle });
+            });
+
+            // KPI grande: SIEMPRE global, sin importar el filtro de caserío (para tener
+            // siempre a la vista el total real de Fondos de Calle del periodo).
+            document.getElementById('fc-total-periodo').innerText = '$' + totalGlobal.toFixed(2);
+            let mName = cM === 'todos' ? "Todo el Año" : document.querySelector(`#fc-mes option[value="${cM}"]`).innerText;
+            let dName = cD === 'todos' ? "" : `(Día ${cD})`;
+            document.getElementById('fc-texto-periodo').innerText = `Reporte: ${mName} ${cA} ${dName}`;
+
+            // Desglose por caserío (siempre se muestran los 4, para comparar de un vistazo)
+            const tbodyCaserios = document.getElementById('fc-tabla-caserios');
+            let filasCaserios = CASERIOS.map(cas => `
+                <tr>
+                    <td data-label="Caserío">${cas}</td>
+                    <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${(totalesCaserio[cas] || 0).toFixed(2)}</td>
+                </tr>`).join('');
+            if (totalesCaserio['Sin caserío'] > 0) {
+                filasCaserios += `
+                <tr>
+                    <td data-label="Caserío">Sin caserío</td>
+                    <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${totalesCaserio['Sin caserío'].toFixed(2)}</td>
+                </tr>`;
+            }
+            filasCaserios += `
+                <tr style="background:#fff3e0;">
+                    <td data-label="Caserío"><strong>GLOBAL</strong></td>
+                    <td data-label="Monto" style="font-weight:800; color:#e65100;">$${totalGlobal.toFixed(2)}</td>
+                </tr>`;
+            tbodyCaserios.innerHTML = filasCaserios;
+
+            // Detalle de movimientos (aquí sí respeta el filtro de caserío elegido)
+            const tbodyDetalle = document.getElementById('fc-tabla-detalle');
+            const detalleFiltrado = movimientosDelPeriodo.filter(m => caserioFiltro === 'todos' || m.caserio === caserioFiltro);
+            tbodyDetalle.innerHTML = [...detalleFiltrado].reverse().map(m => `
+                <tr>
+                    <td data-label="Fecha">${m.fecha}</td>
+                    <td data-label="Cliente">${m.cliente}${m.detalle ? '<br><small style="color:#888;">' + m.detalle + '</small>' : ''}</td>
+                    <td data-label="Caserío">${m.caserio}</td>
+                    <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${m.montoCalle.toFixed(2)}</td>
+                </tr>`).join('') || '<tr><td colspan="4" style="text-align:center; color:#999;">Sin movimientos en este periodo/caserío.</td></tr>';
         }
 
         // --- FUNCIÓN AGREGADA: EXPORTAR CLIENTES SIMPLIFICADA (FINAL) ---
