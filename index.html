@@ -218,11 +218,28 @@
         .sync-dot.dot-error { background:#c62828; }
         .sync-dot.dot-offline { background:#78909c; }
         @keyframes dotPulse { 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+        /* Destello breve en el punto cuando llega un dato nuevo sincronizado desde la nube */
+        .sync-dot.dot-flash { animation: dotFlash 1.1s ease-out; }
+        @keyframes dotFlash {
+            0%   { box-shadow: 0 0 0 0 rgba(46,125,50,0.7); }
+            70%  { box-shadow: 0 0 0 9px rgba(46,125,50,0); }
+            100% { box-shadow: 0 0 0 0 rgba(46,125,50,0); }
+        }
+        /* Aviso flotante de "nuevo dato sincronizado": no bloquea toques ni afecta lo que se esté haciendo */
+        #toast-sync {
+            position: fixed; top: 8px; left: 50%; transform: translateX(-50%) translateY(-20px);
+            background: #1b5e20; color: #fff; font-size: 0.78rem; font-weight: 600;
+            padding: 6px 14px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.35s ease, transform 0.35s ease;
+            white-space: nowrap;
+        }
+        #toast-sync.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         #lista-conectados { text-align:left; font-size:0.78rem; color:#444; margin-top:8px; }
         #lista-conectados .conectado-item { display:flex; align-items:center; gap:6px; padding:3px 0; }
     </style>
 </head>
 <body>
+<div id="toast-sync"></div>
 
 <!-- ===== PANTALLA DE LOGIN ===== -->
 <div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, var(--primary), var(--primary-dark)); padding:20px;">
@@ -317,11 +334,11 @@
     </div>
 </div>
 
-<!-- ===== MODAL: LISTADO DE USUARIOS (Nombre, Contador, Última Lectura) ===== -->
+<!-- ===== MODAL: LISTADO DE USUARIOS (Nombre, Contador, Lecturas) ===== -->
 <div id="modal-listado-usuarios" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:500; align-items:center; justify-content:center; padding:15px;">
     <div style="background:white; border-radius:16px; max-width:640px; width:100%; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:94vh; overflow-y:auto;">
         <h3 style="margin:0 0 4px; text-align:center; font-size:1.3rem;">📋 Listado de Usuarios</h3>
-        <p style="text-align:center; color:#888; font-size:0.85rem; margin:0 0 16px;">Nombre completo, N° de contador y última lectura registrada</p>
+        <p style="text-align:center; color:#888; font-size:0.85rem; margin:0 0 16px;">N°, nombre, contador, lecturas de los 2 meses anteriores y lectura actual</p>
 
         <label style="font-size:0.9rem;">Caserío</label>
         <select id="lu-filtro-caserio" onchange="renderizarListadoUsuarios()" style="margin-bottom:10px;">
@@ -336,27 +353,51 @@
 
         <div id="lu-contador-resultado" style="text-align:center; color:#777; font-size:0.82rem; margin-bottom:8px;"></div>
 
-        <div style="background:white; border:1px solid #eee; border-radius:10px; max-height:360px; overflow-y:auto;">
-            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <div style="background:white; border:1px solid #eee; border-radius:10px; max-height:360px; overflow:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.8rem; white-space:nowrap;">
                 <thead>
                     <tr style="background:#f3f4f6; position:sticky; top:0;">
+                        <th style="text-align:center; padding:8px 6px;">N°</th>
                         <th style="text-align:left; padding:8px 10px;">Nombre</th>
                         <th style="text-align:left; padding:8px 10px;">Contador</th>
-                        <th style="text-align:right; padding:8px 10px;">Últ. Lectura</th>
+                        <th id="lu-th-mes2" style="text-align:right; padding:8px 10px;">Mes -2</th>
+                        <th id="lu-th-mes1" style="text-align:right; padding:8px 10px;">Mes -1</th>
+                        <th style="text-align:right; padding:8px 10px;">Lectura Actual</th>
                     </tr>
                 </thead>
                 <tbody id="lu-tabla-body"></tbody>
             </table>
         </div>
+        <p style="font-size:0.72rem; color:#e65100; margin:6px 0 0; font-style:italic;">* Lectura base cargada al iniciar el sistema (aún no hay recibo real de ese mes).</p>
 
         <div style="margin-top:16px;">
             <button type="button" class="btn btn-danger" onclick="generarPDFListadoUsuarios()">🖨️ Imprimir / Exportar PDF</button>
+        </div>
+        <div style="margin-top:10px;">
+            <button type="button" class="btn btn-primary" onclick="abrirModalCopiarExcel()">📊 Copiar a Excel / Google Sheets</button>
         </div>
 
         <button type="button" class="btn btn-outline" onclick="cerrarModalListadoUsuarios()" style="margin-top:10px;">Cerrar</button>
     </div>
 </div>
+
+<!-- ===== MODAL: COPIAR TABLA A EXCEL / GOOGLE SHEETS ===== -->
+<div id="modal-copiar-excel" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:600; align-items:center; justify-content:center; padding:15px;">
+    <div style="background:white; border-radius:16px; max-width:640px; width:100%; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:94vh; overflow-y:auto;">
+        <h3 style="margin:0 0 4px; text-align:center; font-size:1.3rem;">📊 Copiar a Excel / Google Sheets</h3>
+        <p style="text-align:center; color:#888; font-size:0.85rem; margin:0 0 16px;">Toca "Copiar", luego pega (Ctrl+V) en una celda de Excel o Google Sheets. Las columnas se acomodan solas.</p>
+
+        <textarea id="lu-excel-textarea" readonly style="width:100%; height:220px; font-family:monospace; font-size:0.78rem; padding:10px; border:1px solid #ddd; border-radius:10px; resize:vertical;"></textarea>
+
+        <div style="margin-top:14px;">
+            <button type="button" class="btn btn-primary" onclick="copiarTablaAlPortapapeles()">📋 Copiar al Portapapeles</button>
+        </div>
+
+        <button type="button" class="btn btn-outline" onclick="cerrarModalCopiarExcel()" style="margin-top:10px;">Cerrar</button>
+    </div>
 </div>
+</div>
+
 
 <!-- ===== CONTENIDO DE LA APP (oculto hasta iniciar sesión) ===== -->
 <div id="app-content" style="display:none;">
@@ -968,6 +1009,16 @@
             <button class="btn btn-primary" onclick="cambiarPasswordCobrar()">🔑 Cambiar Contraseña de Cobrar</button>
         </div>
 
+        <h4 style="margin:25px 0 10px 0; font-weight:700;">🔢 Numeración de Recibos</h4>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Renumerar Todos los Recibos</h4>
+            <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                Asigna un número correlativo limpio (1, 2, 3...) a todos los recibos ya existentes, según su fecha de creación, y deja el contador listo para que los próximos recibos continúen la secuencia sin repetirse ni perderse, con o sin internet.
+            </p>
+            <button class="btn btn-primary" onclick="renumerarTodosLosRecibos()">🔢 Renumerar Recibos</button>
+        </div>
+
         <h4 style="margin:25px 0 10px 0; font-weight:700;">💣 Zona de Peligro</h4>
 
         <div class="card card-red">
@@ -1063,6 +1114,43 @@
             lastReciboNum = siguiente;
             localStorage.setItem('agua_last_recibo_num', lastReciboNum);
             return siguiente;
+        }
+
+        // Renumera TODOS los recibos ya existentes con una secuencia limpia (1, 2, 3...),
+        // ordenados por su fecha real de creación (el id es un timestamp), sin importar el
+        // número que tuvieran antes (vacío, repetido, "N/A", etc). Al terminar, deja el
+        // contador local Y el contador atómico de la nube apuntando al número más alto
+        // asignado, para que el próximo recibo (con o sin internet) continúe la secuencia
+        // sin repetirse ni perderse. El mismo campo r.numero es el que usan tanto la
+        // impresión Bluetooth como el PDF, así que ambos siempre mostrarán el mismo número.
+        async function renumerarTodosLosRecibos() {
+            if (!recibos.length) { alert('No hay recibos para renumerar.'); return; }
+
+            if (!confirm(`Esto asignará un número correlativo nuevo (1, 2, 3...) a los ${recibos.length} recibos existentes, según su fecha de creación. Si reimprimes un recibo antiguo (Bluetooth o PDF), mostrará su nuevo número.\n\n¿Deseas continuar?`)) return;
+
+            const ordenados = [...recibos].sort((a, b) => parseInt(a.id) - parseInt(b.id));
+            ordenados.forEach((r, idx) => { r.numero = idx + 1; });
+
+            localStorage.setItem('agua_recibos', JSON.stringify(recibos));
+
+            const totalNum = ordenados.length;
+            lastReciboNum = totalNum;
+            localStorage.setItem('agua_last_recibo_num', lastReciboNum);
+
+            let sincronizados = 0;
+            if (typeof syncRecibo === 'function') {
+                const resultados = await Promise.allSettled(ordenados.map(r => syncRecibo(r)));
+                sincronizados = resultados.filter(x => x.status === 'fulfilled').length;
+            }
+            if (typeof actualizarContadorRecibos === 'function') {
+                try { await actualizarContadorRecibos(totalNum); } catch (e) { console.error(e); }
+            }
+
+            actualizarListaRecibosSiVisible();
+            actualizarDashboard();
+
+            alert(`✅ Se renumeraron ${totalNum} recibos (del 1 al ${totalNum}).` +
+                  (typeof syncRecibo === 'function' ? `\n☁️ Sincronizados a la nube: ${sincronizados}/${totalNum}.` : '\n(Sin conexión a la nube; se guardó localmente.)'));
         }
 
         // VARIABLES DE ESTADO
@@ -2071,24 +2159,80 @@
         }
 
         // ================= MODAL: LISTADO DE USUARIOS =================
-        function calcularUltimaLecturaUsuario(u) {
-            // Misma lógica reforzada usada en la exportación Lite: busca la última
-            // lectura real en los recibos del usuario; si no hay, usa u.ultimaLectura.
-            const usuarioIdNum = parseInt(u.id);
-            const recibosUsuario = recibos.filter(r =>
-                (parseInt(r.usuarioId) === usuarioIdNum) &&
-                (parseFloat(r.lecturaActual) > 0)
-            );
+        const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-            let ultimaLecturaReal = 0;
-            if (recibosUsuario.length > 0) {
-                recibosUsuario.sort((a, b) => parseInt(b.id) - parseInt(a.id));
-                ultimaLecturaReal = parseFloat(recibosUsuario[0].lecturaActual);
+        function parseFechaEsListado(fechaStr) {
+            // Espera formato d/m/aaaa (es-ES). Devuelve {mes, anio} (mes 0-indexado) o null.
+            if (!fechaStr) return null;
+            const partes = String(fechaStr).split('/');
+            if (partes.length !== 3) return null;
+            const mes = parseInt(partes[1], 10) - 1;
+            const anio = parseInt(partes[2], 10);
+            if (isNaN(mes) || isNaN(anio)) return null;
+            return { mes, anio };
+        }
+
+        function obtenerMesesReferenciaListado() {
+            // Calcula los 3 meses de referencia respecto a hoy: hace 2 meses, mes pasado, y mes actual.
+            const hoy = new Date();
+            const meses = [];
+            for (let i = 2; i >= 0; i--) {
+                const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+                meses.push({ mes: d.getMonth(), anio: d.getFullYear(), label: MESES_ES[d.getMonth()] });
             }
-            if (ultimaLecturaReal === 0 || isNaN(ultimaLecturaReal)) {
-                ultimaLecturaReal = parseFloat(u.ultimaLectura) || 0;
+            return meses; // [hace2meses, mesAnterior, mesActual]
+        }
+
+        function calcularLecturasUsuarioListado(u, mesHace2, mesAnterior, mesActual) {
+            const usuarioIdNum = parseInt(u.id);
+            const recibosUsuario = recibos
+                .filter(r => parseInt(r.usuarioId) === usuarioIdNum && parseFloat(r.lecturaActual) > 0)
+                .sort((a, b) => parseInt(a.id) - parseInt(b.id)); // más antiguo primero
+
+            // EXCEPCIÓN "SISTEMA NUEVO": si el usuario tiene un único recibo en toda su
+            // historia y ese recibo cayó justo en el mes actual (por ejemplo, porque la
+            // base de datos de junio se cargó/registró apenas este mes de julio), esa
+            // lectura en realidad corresponde al mes anterior, no al mes actual. La
+            // mostramos en la columna del mes anterior y dejamos "Lectura Actual" en
+            // blanco hasta que se tome la lectura real de este mes. Desde el siguiente
+            // recibo en adelante, cada lectura se ubica en su mes real sin excepciones.
+            if (recibosUsuario.length === 1) {
+                const f = parseFechaEsListado(recibosUsuario[0].fecha);
+                if (f && f.mes === mesActual.mes && f.anio === mesActual.anio) {
+                    return {
+                        lecturaMes2: null,
+                        lecturaMes1: parseFloat(recibosUsuario[0].lecturaActual),
+                        lecturaMes1EsBase: true,
+                        lecturaActual: null
+                    };
+                }
             }
-            return ultimaLecturaReal;
+
+            const buscarMes = (mes, anio) => {
+                const candidatos = recibosUsuario.filter(r => {
+                    const f = parseFechaEsListado(r.fecha);
+                    return f && f.mes === mes && f.anio === anio;
+                });
+                return candidatos.length ? parseFloat(candidatos[candidatos.length - 1].lecturaActual) : null;
+            };
+
+            let lecturaMes1 = buscarMes(mesAnterior.mes, mesAnterior.anio);
+            let lecturaMes1EsBase = false;
+
+            // Si todavía no hay un recibo real para el mes anterior, usamos la lectura base
+            // importada (u.ultimaLectura) como referencia, para no dejarla vacía. En cuanto
+            // exista un recibo real de ese mes, este valor deja de usarse automáticamente.
+            if (lecturaMes1 === null && parseFloat(u.ultimaLectura) > 0) {
+                lecturaMes1 = parseFloat(u.ultimaLectura);
+                lecturaMes1EsBase = true;
+            }
+
+            return {
+                lecturaMes2: buscarMes(mesHace2.mes, mesHace2.anio),
+                lecturaMes1,
+                lecturaMes1EsBase,
+                lecturaActual: buscarMes(mesActual.mes, mesActual.anio)
+            };
         }
 
         function abrirModalListadoUsuarios() {
@@ -2096,6 +2240,12 @@
             document.getElementById('lu-input-buscar').value = '';
             document.getElementById('modal-listado-usuarios').style.display = 'flex';
             registrarPasoAtras(() => cerrarModalListadoUsuarios());
+
+            // Actualiza los encabezados de mes con los nombres reales.
+            const [mesHace2, mesAnterior] = obtenerMesesReferenciaListado();
+            document.getElementById('lu-th-mes2').innerText = mesHace2.label;
+            document.getElementById('lu-th-mes1').innerText = mesAnterior.label;
+
             renderizarListadoUsuarios();
         }
 
@@ -2106,6 +2256,7 @@
         function obtenerListadoUsuariosFiltrado() {
             const caserio = document.getElementById('lu-filtro-caserio').value;
             const filtro = (document.getElementById('lu-input-buscar').value || '').toLowerCase().trim();
+            const [mesHace2, mesAnterior, mesActual] = obtenerMesesReferenciaListado();
 
             return usuarios
                 .filter(u => caserio === 'todos' || u.direccion === caserio)
@@ -2116,7 +2267,7 @@
                     nombre: u.nombre || '',
                     contador: u.contador || '',
                     direccion: u.direccion || '',
-                    ultimaLectura: calcularUltimaLecturaUsuario(u)
+                    ...calcularLecturasUsuarioListado(u, mesHace2, mesAnterior, mesActual)
                 }))
                 .sort((a, b) => a.nombre.localeCompare(b.nombre));
         }
@@ -2129,15 +2280,20 @@
             resumen.innerText = `${lista.length} usuario${lista.length === 1 ? '' : 's'} encontrado${lista.length === 1 ? '' : 's'}`;
 
             if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999; padding:16px;">No hay usuarios que coincidan.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999; padding:16px;">No hay usuarios que coincidan.</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = lista.map(u => `
+            const fmt = (v) => (v === null || v === undefined || isNaN(v)) ? '' : v;
+
+            tbody.innerHTML = lista.map((u, idx) => `
                 <tr style="border-bottom:1px solid #f0f0f0;">
+                    <td style="padding:8px 6px; text-align:center; color:#888;">${idx + 1}</td>
                     <td style="padding:8px 10px;">${u.nombre}<br><small style="color:#888;">${u.direccion}</small></td>
                     <td style="padding:8px 10px;">${u.contador}</td>
-                    <td style="padding:8px 10px; text-align:right; font-weight:700;">${u.ultimaLectura}</td>
+                    <td style="padding:8px 10px; text-align:right;">${fmt(u.lecturaMes2)}</td>
+                    <td style="padding:8px 10px; text-align:right;${u.lecturaMes1EsBase ? ' color:#e65100; font-style:italic;' : ''}">${fmt(u.lecturaMes1)}${u.lecturaMes1EsBase ? ' *' : ''}</td>
+                    <td style="padding:8px 10px; text-align:right; font-weight:700;">${fmt(u.lecturaActual)}</td>
                 </tr>`).join('');
         }
 
@@ -2145,6 +2301,8 @@
             try {
                 const lista = obtenerListadoUsuariosFiltrado();
                 const caserio = document.getElementById('lu-filtro-caserio').value;
+                const [mesHace2, mesAnterior] = obtenerMesesReferenciaListado();
+                const fmt = (v) => (v === null || v === undefined || isNaN(v)) ? '' : String(v);
 
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
@@ -2157,16 +2315,26 @@
                 doc.text(`Caserío: ${caserio}  |  Total: ${lista.length} usuarios`, 14, 22);
                 doc.text(`Generado: ${new Date().toLocaleString()}`, 14, 27);
 
-                const filas = lista.map(u => [u.nombre, u.contador, u.direccion, String(u.ultimaLectura)]);
+                const filas = lista.map((u, idx) => [
+                    String(idx + 1), u.nombre, u.contador, u.direccion,
+                    fmt(u.lecturaMes2), fmt(u.lecturaMes1) + (u.lecturaMes1EsBase && u.lecturaMes1 !== null ? ' *' : ''), fmt(u.lecturaActual)
+                ]);
 
-                doc.autoTable({
+                const finalY = doc.autoTable({
                     startY: 32,
-                    head: [['Nombre Completo', 'Contador', 'Caserío', 'Última Lectura']],
-                    body: filas.length ? filas : [['—', '—', '—', '—']],
-                    styles: { fontSize: 8, cellPadding: 2 },
+                    head: [['N°', 'Nombre Completo', 'Contador', 'Caserío', mesHace2.label, mesAnterior.label, 'Lectura Actual']],
+                    body: filas.length ? filas : [['—', '—', '—', '—', '—', '—', '—']],
+                    styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
                     headStyles: { fillColor: [2, 136, 209] },
+                    columnStyles: { 0: { halign: 'center', cellWidth: 8 } },
                     margin: { left: 14, right: 14 }
-                });
+                }).lastAutoTable.finalY;
+
+                if (lista.some(u => u.lecturaMes1EsBase)) {
+                    doc.setFontSize(8);
+                    doc.setFont('helvetica', 'italic');
+                    doc.text('* Lectura base cargada al iniciar el sistema (aún no hay recibo real registrado en ese mes).', 14, finalY + 6);
+                }
 
                 const filename = `Listado_Usuarios_${Date.now()}.pdf`;
                 if (typeof Android !== 'undefined' && Android.guardarArchivo) {
@@ -2178,6 +2346,62 @@
             } catch (e) {
                 console.error('Error generando el PDF del listado de usuarios:', e);
                 alert('⚠️ No se pudo generar el PDF: ' + e.message);
+            }
+        }
+
+        // ================= MODAL: COPIAR TABLA A EXCEL / GOOGLE SHEETS =================
+        function abrirModalCopiarExcel() {
+            const lista = obtenerListadoUsuariosFiltrado();
+            const [mesHace2, mesAnterior] = obtenerMesesReferenciaListado();
+            const fmt = (v) => (v === null || v === undefined || isNaN(v)) ? '' : String(v);
+
+            const encabezado = ['N°', 'Nombre', 'Contador', 'Caserío', mesHace2.label, mesAnterior.label, 'Lectura Actual'];
+            const filas = lista.map((u, idx) => [
+                String(idx + 1), u.nombre, u.contador, u.direccion,
+                fmt(u.lecturaMes2), fmt(u.lecturaMes1) + (u.lecturaMes1EsBase && u.lecturaMes1 !== null ? ' *' : ''), fmt(u.lecturaActual)
+            ]);
+
+            let tsv = [encabezado, ...filas].map(fila => fila.join('\t')).join('\n');
+            if (lista.some(u => u.lecturaMes1EsBase)) {
+                tsv += '\n\n* Lectura base cargada al iniciar el sistema (aún no hay recibo real registrado en ese mes).';
+            }
+            document.getElementById('lu-excel-textarea').value = tsv;
+            document.getElementById('modal-copiar-excel').style.display = 'flex';
+            registrarPasoAtras(() => cerrarModalCopiarExcel());
+        }
+
+        function cerrarModalCopiarExcel() {
+            document.getElementById('modal-copiar-excel').style.display = 'none';
+        }
+
+        function copiarTablaAlPortapapeles() {
+            const textarea = document.getElementById('lu-excel-textarea');
+            textarea.focus();
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+
+            const copiarConExecCommand = () => {
+                try {
+                    return document.execCommand('copy');
+                } catch (e) {
+                    return false;
+                }
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textarea.value)
+                    .then(() => alert('✅ Tabla copiada. Ahora pégala (Ctrl+V) en Excel o Google Sheets.'))
+                    .catch(() => {
+                        if (copiarConExecCommand()) {
+                            alert('✅ Tabla copiada. Ahora pégala (Ctrl+V) en Excel o Google Sheets.');
+                        } else {
+                            alert('⚠️ No se pudo copiar automáticamente. El texto ya está seleccionado: usa Ctrl+C.');
+                        }
+                    });
+            } else if (copiarConExecCommand()) {
+                alert('✅ Tabla copiada. Ahora pégala (Ctrl+V) en Excel o Google Sheets.');
+            } else {
+                alert('⚠️ No se pudo copiar automáticamente. El texto ya está seleccionado: usa Ctrl+C.');
             }
         }
 
@@ -2820,6 +3044,7 @@
             if(!confirm("¿Eliminar?")) return;
             const ix = recibos.findIndex(r => r.id == id);
             if(ix > -1) {
+                const numEliminado = Number(recibos[ix].numero);
                 if(recibos[ix].estado === 'pagado') {
                     const cIx = contabilidad.findIndex(c => c.reciboId == id);
                     if(cIx > -1) {
@@ -2838,6 +3063,17 @@
                 }
                 recibos.splice(ix, 1); localStorage.setItem('agua_recibos', JSON.stringify(recibos)); actualizarDashboard(); actualizarListaRecibosSiVisible();
                 if(typeof eliminarReciboNube === 'function') eliminarReciboNube(id);
+
+                // Si el recibo eliminado tenía el número más alto emitido hasta ahora, retrocede
+                // el contador (nube y local) para que el siguiente recibo reutilice ese número
+                // en vez de dejarlo saltado para siempre.
+                if (!isNaN(numEliminado) && numEliminado > 0) {
+                    if (typeof window.retrocederContadorRecibo === 'function') window.retrocederContadorRecibo(numEliminado);
+                    if (lastReciboNum === numEliminado) {
+                        lastReciboNum = numEliminado - 1;
+                        localStorage.setItem('agua_last_recibo_num', lastReciboNum);
+                    }
+                }
             }
         }
 
@@ -3700,6 +3936,30 @@
             localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
         });
 
+        // Muestra un aviso breve y NO bloqueante (no intercepta toques, no abre modales, no interrumpe
+        // lo que el usuario esté escribiendo) cuando llega un dato nuevo sincronizado desde otro
+        // dispositivo/cajero. Se auto-oculta solo; el usuario no tiene que cerrarlo.
+        let toastSyncTimeout = null;
+        function mostrarAvisoSync(texto) {
+            const t = document.getElementById('toast-sync');
+            if (!t) return;
+            t.innerText = texto;
+            t.classList.add('show');
+            clearTimeout(toastSyncTimeout);
+            toastSyncTimeout = setTimeout(() => t.classList.remove('show'), 2200);
+        }
+
+        // Hace parpadear brevemente (destello verde) el punto de estado para llamar la atención
+        // sin cambiarle el color permanentemente ni tapar nada de la pantalla.
+        function destellarSyncDot() {
+            [document.getElementById('sync-dot'), document.getElementById('sync-dot-detalle')].forEach(dot => {
+                if (!dot) return;
+                dot.classList.remove('dot-flash');
+                void dot.offsetWidth; // fuerza reinicio de la animación si ya estaba corriendo
+                dot.classList.add('dot-flash');
+            });
+        }
+
         // estado: 'connecting' (amarillo, parpadeando) | 'synced' (verde) | 'error' (rojo) | 'offline' (gris)
         function setSyncText(txt, estado) {
             const a = document.getElementById('sync-status');
@@ -3772,6 +4032,7 @@
             if (listenersIniciados) return;
             listenersIniciados = true;
 
+            let primeraCargaUsuarios = true;
             onSnapshot(collection(db, 'usuarios'), (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
@@ -3781,8 +4042,16 @@
                 localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
                 if (typeof renderizarUsuariosCaserio === 'function' && caserioSeleccionado) renderizarUsuariosCaserio();
                 setSyncText('🟢 Sincronizado', 'synced');
+                // Solo avisamos cuando el cambio viene de la nube (otro dispositivo), no en la
+                // carga inicial ni cuando el cambio es tu propia escritura aún pendiente de confirmar.
+                if (!primeraCargaUsuarios && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
+                    destellarSyncDot();
+                    mostrarAvisoSync('🟢 Usuarios actualizados');
+                }
+                primeraCargaUsuarios = false;
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
+            let primeraCargaRecibos = true;
             onSnapshot(collection(db, 'recibos'), (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
@@ -3793,8 +4062,14 @@
                 if (typeof actualizarDashboard === 'function') actualizarDashboard();
                 if (typeof actualizarListaRecibosSiVisible === 'function') actualizarListaRecibosSiVisible();
                 setSyncText('🟢 Sincronizado', 'synced');
+                if (!primeraCargaRecibos && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
+                    destellarSyncDot();
+                    mostrarAvisoSync('🟢 Recibo actualizado');
+                }
+                primeraCargaRecibos = false;
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
+            let primeraCargaContabilidad = true;
             onSnapshot(collection(db, 'contabilidad'), (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
@@ -3804,6 +4079,11 @@
                 localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
                 if (typeof actualizarResumenContable === 'function') actualizarResumenContable();
                 setSyncText('🟢 Sincronizado', 'synced');
+                if (!primeraCargaContabilidad && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
+                    destellarSyncDot();
+                    mostrarAvisoSync('🟢 Contabilidad actualizada');
+                }
+                primeraCargaContabilidad = false;
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
             iniciarPresencia();
@@ -3871,6 +4151,11 @@
         window.syncMovimientoCaja = (m) => setDoc(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
         window.eliminarMovimientoCajaNube = (id) => deleteDoc(doc(db, 'movimientos', String(id))).catch(console.error);
 
+        // Deja el contador atómico de N° de recibo (usado por obtenerSiguienteNumeroRecibo)
+        // apuntando a un valor específico. Se usa después de renumerar todos los recibos
+        // existentes, para que el siguiente recibo continúe la secuencia sin repetirse.
+        window.actualizarContadorRecibos = (valor) => setDoc(doc(db, 'contadores', 'recibos'), { valor }, { merge: true });
+
         // Contador atómico de N° de recibo (evita duplicados con varios cajeros a la vez)
         window.obtenerSiguienteNumeroRecibo = async function () {
             // Si el dispositivo ya sabe que no tiene internet, ni lo intentamos: vamos directo al respaldo local.
@@ -3888,6 +4173,26 @@
             // se cae al contador local en vez de dejar al cajero esperando.
             const limiteEspera = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
             return await Promise.race([transaccion, limiteEspera]);
+        };
+
+        // Retrocede el contador atómico de N° de recibo cuando se elimina un recibo por error,
+        // pero SOLO si ese número era el último emitido (nadie generó un recibo más nuevo desde
+        // entonces). Así el siguiente recibo reutiliza el número en vez de dejarlo saltado, sin
+        // arriesgar duplicados si otro cajero ya avanzó el contador mientras tanto.
+        window.retrocederContadorRecibo = async function (numeroEliminado) {
+            try {
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+                const ref = doc(db, 'contadores', 'recibos');
+                await runTransaction(db, async (tx) => {
+                    const snap = await tx.get(ref);
+                    const actual = snap.exists() ? (snap.data().valor || 0) : 0;
+                    if (actual === numeroEliminado) {
+                        tx.set(ref, { valor: numeroEliminado - 1 }, { merge: true });
+                    }
+                });
+            } catch (e) {
+                console.error('No se pudo retroceder el contador de recibos (sin internet u otro error):', e);
+            }
         };
 
         // Sube un backup JSON antiguo (Google Sheets) completo a Firestore, en lotes de 450 documentos.
