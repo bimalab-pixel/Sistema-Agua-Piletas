@@ -1306,6 +1306,17 @@
                 if (typeof eliminarMovimientoNube === 'function') eliminarMovimientoNube(id);
                 renderHistorial();
                 actualizarDashboard();
+
+                // Si el vale eliminado tenía el número correlativo más alto emitido hasta ahora,
+                // retrocede el contador (nube o local, según de dónde vino ese número) para que
+                // el siguiente vale reutilice ese número en vez de dejarlo saltado.
+                if (m) {
+                    if (m.numeroOrigen === 'firestore') {
+                        retrocederContadorVale(m.numeroRecibo);
+                    } else if (m.numeroOrigen === 'local' && m.numeroPendiente) {
+                        retrocederContadorLocalSiEsUltimo(m.numeroFormateado);
+                    }
+                }
             }
         }
 
@@ -1813,6 +1824,42 @@ function borrarTodo() {
         const db = initializeFirestore(fbApp, {
             localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
         });
+
+        // Retrocede el contador atómico de N° de vale/boleta (campo "ultimo") cuando se elimina
+        // un vale por error, pero SOLO si ese número era el último emitido (nadie generó un vale
+        // más nuevo desde entonces). Así el siguiente vale reutiliza el número en vez de dejarlo
+        // saltado para siempre, sin arriesgar duplicados si otro dispositivo ya avanzó el contador.
+        async function retrocederContadorVale(numeroEliminado) {
+            if (typeof numeroEliminado !== 'number' || !numeroEliminado) return;
+            try {
+                await runTransaction(db, async (tx) => {
+                    const snap = await tx.get(RECIBOS_COUNTER_REF);
+                    const actual = snap.exists() ? (snap.data().ultimo || 0) : 0;
+                    if (actual === numeroEliminado) {
+                        tx.set(RECIBOS_COUNTER_REF, { ultimo: numeroEliminado - 1 }, { merge: true });
+                    }
+                });
+            } catch (e) {
+                console.error('No se pudo retroceder el contador de vales (sin internet u otro error):', e);
+            }
+        }
+
+        // Igual que arriba pero para el contador LOCAL (números temporales "OFF-DISP-001"
+        // usados sin internet, antes de reconciliar). Solo retrocede si el vale borrado era
+        // el último generado en ESTE dispositivo.
+        function retrocederContadorLocalSiEsUltimo(numeroFormateado) {
+            if (typeof numeroFormateado !== 'string' || !numeroFormateado.startsWith('OFF-')) return;
+            const partes = numeroFormateado.split('-'); // ["OFF", "DISP", "001"]
+            if (partes.length !== 3) return;
+            const [, deviceIdVale, seqStr] = partes;
+            if (deviceIdVale !== getDeviceId()) return; // no es de este dispositivo, no tocamos nada
+            const key = 'caja_correlativo_local';
+            const actual = parseInt(localStorage.getItem(key) || '0', 10);
+            const seq = parseInt(seqStr, 10);
+            if (actual === seq) {
+                localStorage.setItem(key, String(seq - 1));
+            }
+        }
 
         function setSyncText(txt) {
             const el = document.getElementById('sync-status');
