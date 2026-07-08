@@ -569,6 +569,11 @@
     <script>
         // --- LÓGICA SEGURA ---
         let movimientos = [];
+        // Depuración de movimientos huérfanos: set con los ids de recibos de agua que SÍ existen todavía.
+        // Un movimiento con reciboId que ya no aparece aquí significa que el recibo fue borrado en el
+        // Sistema de Agua y el movimiento correspondiente debe borrarse también de Caja.
+        let recibosValidos = new Set();
+        let recibosCargadosAlMenosUnaVez = false;
         let config = { admin: 'ACOMAACAP' };
 
         try {
@@ -2070,7 +2075,46 @@ function borrarTodo() {
                 const hist = document.getElementById('historial');
                 if (hist && hist.classList.contains('active') && typeof renderHistorial === 'function') renderHistorial();
                 setSyncText('🟢 Sincronizado');
+                depurarMovimientosHuerfanos();
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización'); });
+
+            // Escucha (solo lectura) los recibos de agua para saber cuáles siguen existiendo.
+            // Con esto, si un movimiento de Caja quedó "huérfano" (su recibo ya fue borrado en el
+            // Sistema de Agua pero por algún corte de conexión no se alcanzó a borrar aquí también),
+            // se limpia solo la próxima vez que Caja sincroniza.
+            onSnapshot(collection(db, 'recibos'), (snap) => {
+                snap.docChanges().forEach(ch => {
+                    if (ch.type === 'removed') recibosValidos.delete(ch.doc.id);
+                    else recibosValidos.add(ch.doc.id);
+                });
+                recibosCargadosAlMenosUnaVez = true;
+                depurarMovimientosHuerfanos();
+            }, err => console.error('Error escuchando recibos (depuración de huérfanos):', err));
+        }
+
+        // Borra de Caja (local + nube) cualquier movimiento que venga de un recibo de agua que
+        // ya no existe. Solo actúa una vez que se recibió al menos una lista completa de recibos,
+        // para no borrar nada por error mientras carga la sincronización inicial.
+        function depurarMovimientosHuerfanos() {
+            if (!recibosCargadosAlMenosUnaVez) return;
+            const huerfanos = movimientos.filter(m => m.reciboId && !recibosValidos.has(String(m.reciboId)));
+            if (huerfanos.length === 0) return;
+
+            huerfanos.forEach(m => {
+                movimientos = movimientos.filter(x => x.id !== m.id);
+                if (typeof eliminarMovimientoNube === 'function') eliminarMovimientoNube(m.id);
+                if (m.numeroOrigen === 'firestore') {
+                    retrocederContadorVale(m.numeroRecibo);
+                } else if (m.numeroOrigen === 'local' && m.numeroPendiente) {
+                    retrocederContadorLocalSiEsUltimo(m.numeroFormateado);
+                }
+            });
+
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+            if (typeof actualizarDashboard === 'function') actualizarDashboard();
+            const hist = document.getElementById('historial');
+            if (hist && hist.classList.contains('active') && typeof renderHistorial === 'function') renderHistorial();
+            console.log('🧹 Depuración automática: se eliminaron ' + huerfanos.length + ' movimiento(s) huérfano(s) de Caja (recibo de agua ya no existe).');
         }
 
         // ---------- ESCRITURA (app -> nube) ----------
