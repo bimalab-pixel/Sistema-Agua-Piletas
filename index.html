@@ -3021,6 +3021,7 @@
 
                     // Número correlativo de ticket (misma secuencia que usa Caja para todos sus vales/tickets).
                     try {
+                        if (typeof generarNumeroTicketCaja !== 'function') throw new Error('generarNumeroTicketCaja aún no está disponible (módulo de Firebase no ha cargado)');
                         const numInfo = await generarNumeroTicketCaja();
                         movimientoCajaChica.numeroRecibo = numInfo.numero;
                         movimientoCajaChica.numeroFormateado = numInfo.formateado;
@@ -4303,6 +4304,16 @@
             const seq = parseInt(seqStr, 10);
             if (actual === seq) localStorage.setItem(key, String(seq - 1));
         }
+
+        // IMPORTANTE: estas 3 funciones se usan desde el <script> clásico de arriba (donde se
+        // cobra un recibo de agua), pero están definidas aquí dentro del <script type="module">.
+        // Un módulo tiene su propio alcance, así que sin exponerlas en window quedan invisibles
+        // para el script clásico: la llamada falla en silencio (el catch solo lo registra en
+        // consola) y el movimiento de Caja se queda sin numeroFormateado. Por eso ningún cobro
+        // de agua había recibido nunca su ticket correlativo real.
+        window.generarNumeroTicketCaja = generarNumeroTicketCaja;
+        window.retrocederContadorTicketCaja = retrocederContadorTicketCaja;
+        window.retrocederContadorTicketLocalSiEsUltimo = retrocederContadorTicketLocalSiEsUltimo;
 
         // Cuando vuelve la conexión, reemplaza los números "OFF-..." de tickets pendientes
         // (generados sin internet, desde Agua o desde Caja) por números reales de Firestore,
