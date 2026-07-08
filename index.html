@@ -2920,7 +2920,7 @@
         // ===== FIN HISTORIAL POR LOTES =====
 
            // ⚠️ FUNCIÓN FINAL Y CORREGIDA PARA EVITAR DUPLICIDAD EN CAJA CHICA ⚠️
-        function pagarRecibo(id) {
+        async function pagarRecibo(id) {
             const reciboActual = recibos.find(r => r.id == id);
             if(!reciboActual) return;
 
@@ -2984,7 +2984,8 @@
                 let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
                 const todosLosRecibosPagados = [recibos[ix], ...recibosPendientesAnteriores.map(rv => recibos.find(r => r.id === rv.id))];
 
-                todosLosRecibosPagados.forEach((rp, idx) => {
+                for (let idx = 0; idx < todosLosRecibosPagados.length; idx++) {
+                    const rp = todosLosRecibosPagados[idx];
                     const consumoRp = parseFloat(rp.total) || 0;
                     const extraRp = parseFloat(rp.extra) || 0;
                     const totalRp = consumoRp + extraRp;
@@ -3017,9 +3018,21 @@
                         total: totalRp,
                         items: itemsCaja
                     };
+
+                    // Número correlativo de ticket (misma secuencia que usa Caja para todos sus vales/tickets).
+                    try {
+                        const numInfo = await generarNumeroTicketCaja();
+                        movimientoCajaChica.numeroRecibo = numInfo.numero;
+                        movimientoCajaChica.numeroFormateado = numInfo.formateado;
+                        movimientoCajaChica.numeroOrigen = numInfo.origen;
+                        movimientoCajaChica.numeroPendiente = numInfo.pendiente;
+                    } catch (e) {
+                        console.error('No se pudo generar número de ticket para este cobro:', e);
+                    }
+
                     movimientosCaja.push(movimientoCajaChica);
                     if (typeof syncMovimientoCaja === 'function') syncMovimientoCaja(movimientoCajaChica);
-                });
+                }
 
                 localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
                 localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
@@ -3058,7 +3071,15 @@
                     if (movsAsociados.length > 0) {
                         movimientosCaja = movimientosCaja.filter(m => !(m.reciboId == id || m.id == id));
                         localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
-                        movsAsociados.forEach(m => { if (typeof eliminarMovimientoCajaNube === 'function') eliminarMovimientoCajaNube(m.id); });
+                        movsAsociados.forEach(m => {
+                            if (typeof eliminarMovimientoCajaNube === 'function') eliminarMovimientoCajaNube(m.id);
+                            // Si el ticket borrado era el último emitido, libera su número igual que con los recibos de agua.
+                            if (m.numeroOrigen === 'firestore' && typeof retrocederContadorTicketCaja === 'function') {
+                                retrocederContadorTicketCaja(m.numeroRecibo);
+                            } else if (m.numeroOrigen === 'local' && m.numeroPendiente && typeof retrocederContadorTicketLocalSiEsUltimo === 'function') {
+                                retrocederContadorTicketLocalSiEsUltimo(m.numeroFormateado);
+                            }
+                        });
                     }
                 }
                 recibos.splice(ix, 1); localStorage.setItem('agua_recibos', JSON.stringify(recibos)); actualizarDashboard(); actualizarListaRecibosSiVisible();
@@ -3080,6 +3101,16 @@
         // Función auxiliar para que funcionen las tildes y la Ñ en Bluetooth
         function utf8_to_b64(str) {
             return window.btoa(unescape(encodeURIComponent(str)));
+        }
+
+        // La mayoría de impresoras térmicas Bluetooth no soportan UTF-8 (nombres de clientes,
+        // direcciones, etc. con tildes o ñ salen como símbolos raros), así que solo para lo que
+        // se manda a la impresora térmica quitamos acentos y cambiamos ñ/Ñ por n/N. El PDF no
+        // usa esta función porque ahí sí se ven bien las tildes.
+        function paraImpresoraTermica(str) {
+            return String(str)
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^\x00-\x7F]/g, '');
         }
 
         // --- IMPRESIÓN BLUETOOTH OPTIMIZADA ---
@@ -3180,8 +3211,9 @@
             }
             t += "\n\n\n"; // Espacio final para cortar papel
 
-            // CAMBIO IMPORTANTE: Usamos la función segura para acentos
-            const base64Str = utf8_to_b64(t);
+            // Quitamos tildes/ñ porque la impresora térmica no las soporta (los comandos ESC/POS
+            // de negrita usan bytes de control normales, así que no se ven afectados).
+            const base64Str = utf8_to_b64(paraImpresoraTermica(t));
 
             window.location.href = "rawbt:base64," + base64Str;
         }
@@ -4194,6 +4226,108 @@
                 console.error('No se pudo retroceder el contador de recibos (sin internet u otro error):', e);
             }
         };
+
+        // ================= NUMERACIÓN CORRELATIVA DE TICKETS DE CAJA =================
+        // Los tickets que se generan automáticamente aquí al cobrar un recibo de agua usan
+        // EXACTAMENTE el mismo contador que caja.html (mismo documento Firestore, campo "ultimo"),
+        // así todos los tickets de Caja quedan en una sola secuencia correlativa, sin importar si
+        // se crearon desde Agua o desde Caja directamente. Mismo respaldo sin internet (prefijo
+        // "OFF-") y misma reconciliación automática al recuperar la conexión.
+        const TICKET_CAJA_COUNTER_REF = doc(db, 'contadores', 'recibos');
+
+        function getDeviceIdCaja() {
+            let devId = localStorage.getItem('caja_device_id');
+            if (!devId) {
+                devId = Math.random().toString(36).substring(2, 6).toUpperCase();
+                localStorage.setItem('caja_device_id', devId);
+            }
+            return devId;
+        }
+
+        async function obtenerNumeroTicketFirestore() {
+            return await runTransaction(db, async (tx) => {
+                const snap = await tx.get(TICKET_CAJA_COUNTER_REF);
+                const actual = snap.exists() ? (snap.data().ultimo || 0) : 0;
+                const siguiente = actual + 1;
+                tx.set(TICKET_CAJA_COUNTER_REF, { ultimo: siguiente, actualizadoEn: serverTimestamp() }, { merge: true });
+                return siguiente;
+            });
+        }
+
+        function obtenerNumeroTicketLocal() {
+            const key = 'caja_correlativo_local';
+            const seq = parseInt(localStorage.getItem(key) || '0', 10) + 1;
+            localStorage.setItem(key, String(seq));
+            return `OFF-${getDeviceIdCaja()}-${String(seq).padStart(3, '0')}`;
+        }
+
+        async function generarNumeroTicketCaja() {
+            if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+                try {
+                    const n = await obtenerNumeroTicketFirestore();
+                    return { numero: n, formateado: '#' + String(n).padStart(5, '0'), origen: 'firestore', pendiente: false };
+                } catch (e) {
+                    console.warn('No se pudo generar número de ticket en Firestore, se usa numeración local temporal:', e);
+                }
+            }
+            const local = obtenerNumeroTicketLocal();
+            return { numero: local, formateado: local, origen: 'local', pendiente: true };
+        }
+
+        // Retrocede el contador de tickets de Caja al eliminar uno, solo si era el último emitido
+        // (misma regla de seguridad que el contador de recibos de agua).
+        async function retrocederContadorTicketCaja(numeroEliminado) {
+            if (typeof numeroEliminado !== 'number' || !numeroEliminado) return;
+            try {
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+                await runTransaction(db, async (tx) => {
+                    const snap = await tx.get(TICKET_CAJA_COUNTER_REF);
+                    const actual = snap.exists() ? (snap.data().ultimo || 0) : 0;
+                    if (actual === numeroEliminado) {
+                        tx.set(TICKET_CAJA_COUNTER_REF, { ultimo: numeroEliminado - 1 }, { merge: true });
+                    }
+                });
+            } catch (e) {
+                console.error('No se pudo retroceder el contador de tickets (sin internet u otro error):', e);
+            }
+        }
+
+        function retrocederContadorTicketLocalSiEsUltimo(numeroFormateado) {
+            if (typeof numeroFormateado !== 'string' || !numeroFormateado.startsWith('OFF-')) return;
+            const partes = numeroFormateado.split('-');
+            if (partes.length !== 3) return;
+            const [, deviceIdTicket, seqStr] = partes;
+            if (deviceIdTicket !== getDeviceIdCaja()) return;
+            const key = 'caja_correlativo_local';
+            const actual = parseInt(localStorage.getItem(key) || '0', 10);
+            const seq = parseInt(seqStr, 10);
+            if (actual === seq) localStorage.setItem(key, String(seq - 1));
+        }
+
+        // Cuando vuelve la conexión, reemplaza los números "OFF-..." de tickets pendientes
+        // (generados sin internet, desde Agua o desde Caja) por números reales de Firestore,
+        // en el mismo orden en que se crearon.
+        async function reconciliarNumerosTicketsPendientes() {
+            let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+            const pendientes = movimientosCaja.filter(m => m.numeroPendiente).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            if (pendientes.length === 0) return;
+            for (const m of pendientes) {
+                try {
+                    const n = await obtenerNumeroTicketFirestore();
+                    m.numeroRecibo = n;
+                    m.numeroFormateado = '#' + String(n).padStart(5, '0');
+                    m.numeroOrigen = 'firestore';
+                    m.numeroPendiente = false;
+                    if (typeof syncMovimientoCaja === 'function') syncMovimientoCaja(m);
+                } catch (e) {
+                    console.error('No se pudo reconciliar número de ticket, se reintentará más tarde:', e);
+                    break;
+                }
+            }
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+        }
+        window.addEventListener('online', reconciliarNumerosTicketsPendientes);
+        // ================= FIN NUMERACIÓN CORRELATIVA DE TICKETS DE CAJA =================
 
         // Sube un backup JSON antiguo (Google Sheets) completo a Firestore, en lotes de 450 documentos.
         window.subirBackupANube = async function (usuariosArr, recibosArr, contabilidadArr) {
