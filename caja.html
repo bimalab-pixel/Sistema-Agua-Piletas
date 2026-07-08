@@ -917,7 +917,7 @@
                         <div>
                             <span class="badge ${isEntrada ? 'badge-in' : 'badge-out'}">${isEntrada ? 'INGRESO' : (esBoleta ? 'BOLETA DE PAGO' : 'SALIDA')}</span>
                             <strong style="margin-left:5px; font-size:1.05rem;">${conceptoDisplay}</strong>
-                            <div style="font-size:0.75rem; color:#b0bec5; margin-top:4px;">${m.fecha} • ${m.hora}</div>
+                            <div style="font-size:0.75rem; color:#b0bec5; margin-top:4px;">${m.fecha} • ${m.hora}${m.numeroFormateado ? ` • Ticket ${m.numeroFormateado}${m.numeroPendiente ? ' (pendiente de sincronizar)' : ''}` : ''}</div>
                             ${notaCalle}
                         </div>
                         <div style="text-align:right;">
