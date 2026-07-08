@@ -475,6 +475,12 @@
                 </div>
             </div>
 
+            <div class="card card-income">
+                <h4 style="margin:0 0 10px 0;">🔢 Numeración de Tickets</h4>
+                <p style="font-size:0.8rem; color:#666; margin-bottom:15px;">Vuelve a numerar todos los tickets/vales (incluidos los generados desde el Sistema de Agua) en orden correlativo, empezando desde el #00001, sin dejar huecos.</p>
+                <button id="btn-renumerar-tickets" class="btn btn-bt" onclick="renumerarTodosLosTickets()">🔢 Renumerar Todos los Tickets</button>
+            </div>
+
             <div class="card card-expense">
                 <h4 style="margin:0 0 10px 0; color:var(--danger);">⚠️ Zona de Peligro</h4>
                 <p style="font-size:0.8rem; color:#666; margin-bottom:15px;">Si la aplicación falla o quieres empezar de cero.</p>
@@ -1388,6 +1394,17 @@ function borrarTodo() {
             return window.btoa(unescape(encodeURIComponent(str)));
         }
 
+        // La mayoría de impresoras térmicas Bluetooth (58mm/80mm) NO soportan UTF-8: solo
+        // entienden una tabla de un solo byte por caracter, así que letras como á, é, í, ó, ú, ñ
+        // salen como símbolos raros (ej. "Recaudaci├|n"). Por eso, SOLO para lo que se manda a la
+        // impresora térmica, quitamos los acentos y cambiamos ñ/Ñ por n/N antes de imprimir.
+        // El PDF no usa esta función porque ahí sí se ven bien las tildes.
+        function paraImpresoraTermica(str) {
+            return String(str)
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita tildes (incluye la de la ñ)
+                .replace(/[^\x00-\x7F]/g, ''); // por si queda algún otro símbolo raro no soportado
+        }
+
         // Divide un texto en varias líneas de máximo "ancho" caracteres, sin cortar
         // palabras a la mitad (para que no se pierda información en el ticket térmico).
         function envolverTextoPlano(texto, ancho) {
@@ -1422,11 +1439,11 @@ function borrarTodo() {
 
             // --- DATOS DEL MOVIMIENTO (con ajuste de línea, sin cortar información) ---
             if (m.tipo === 'entrada') {
-                t += "TIPO: INGRESO\n";
-                envolverTextoPlano(`Ref: ${m.concepto}`, ANCHO).forEach(l => t += l + "\n");
-                envolverTextoPlano(`Atiende: ${m.admin}`, ANCHO).forEach(l => t += l + "\n");
+                t += "INGRESO\n";
+                envolverTextoPlano(`De/Para: ${m.concepto}`, ANCHO).forEach(l => t += l + "\n");
+                envolverTextoPlano(`Atendido por: ${m.admin}`, ANCHO).forEach(l => t += l + "\n");
             } else {
-                t += "TIPO: VALE SALIDA\n";
+                t += "SALIDA\n";
                 envolverTextoPlano(`Entrega: ${m.admin}`, ANCHO).forEach(l => t += l + "\n");
                 envolverTextoPlano(`Recibe: ${m.recibe}`, ANCHO).forEach(l => t += l + "\n");
             }
@@ -1460,8 +1477,8 @@ function borrarTodo() {
 
             t += "\n\n\n"; // Espacio extra para cortar papel
 
-            // Convertir y enviar
-            const base64Str = utf8_to_b64(t);
+            // Convertir y enviar (se quitan tildes/ñ porque la impresora térmica no las soporta)
+            const base64Str = utf8_to_b64(paraImpresoraTermica(t));
             window.location.href = "rawbt:base64," + base64Str;
         }
       // ⚠️ FUNCIÓN MODIFICADA PARA USAR LA INTERFAZ 'Android' DEL SISTEMA DE AGUA ⚠️
@@ -1683,9 +1700,20 @@ function borrarTodo() {
                 const lineasAtiende = medidor.splitTextToSize(textoAtiende, anchoUtil);
                 const lineasExtra = (lineasDePara.length - 1) + (lineasAtiende.length - 1);
 
-                // Altura dinámica según cantidad de items y de líneas extra por ajuste de texto
+                // Cuántas líneas ocupará cada item (algunas descripciones, como las que incluyen
+                // el N° de recibo de agua, no caben en una sola línea).
+                medidor.setFontSize(8.5);
+                const lineasPorItem = (m.items || []).map(item => {
+                    const primeras = medidor.splitTextToSize(`${item.desc} x${item.cant}`, anchoUtil - 18);
+                    return primeras.length > 1
+                        ? 1 + medidor.splitTextToSize(primeras.slice(1).join(' '), anchoUtil).length
+                        : primeras.length;
+                });
+                const totalLineasItems = lineasPorItem.reduce((a, b) => a + b, 0);
+
+                // Altura dinámica según cantidad de líneas de items y líneas extra por ajuste de texto
                 const alturaBase = 70; // encabezado + total + firmas + pie
-                const alturaItems = (m.items ? m.items.length : 0) * 5;
+                const alturaItems = totalLineasItems * 4.2 + (m.items ? m.items.length : 0) * 0.8;
                 const alturaMm = alturaBase + alturaItems + (lineasExtra * 4.2);
 
                 const doc = new jsPDF({ unit: 'mm', format: [80, alturaMm] });
@@ -1718,7 +1746,7 @@ function borrarTodo() {
 
                 linea('ACOMAACAP', { size: 13, bold: true, gap: 5 });
                 linea('TESORERIA', { size: 8, gap: 5 });
-                linea(`Ticket ${m.numeroFormateado || ('#' + m.id)}`, { size: 8, gap: 4.5 });
+                linea(`Ticket ${m.numeroFormateado || ('#' + m.id.toString().slice(-6))}`, { size: 8, gap: 4.5 });
                 if (m.numeroPendiente) linea('(numero temporal, sin internet)', { size: 6.5, gap: 4 });
                 linea(`${m.fecha} ${m.hora}`, { size: 8, gap: 5 });
                 separador();
@@ -1729,10 +1757,19 @@ function borrarTodo() {
                 (m.items || []).forEach(item => {
                     doc.setFont('courier', 'normal');
                     doc.setFontSize(8.5);
-                    const descLinea = doc.splitTextToSize(`${item.desc} x${item.cant}`, anchoUtil - 18)[0] || '';
-                    doc.text(descLinea, 5, y);
-                    doc.text(`$${(item.cant * item.precio).toFixed(2)}`, 75, y, { align: 'right' });
-                    y += 5;
+                    const precioTxt = `$${(item.cant * item.precio).toFixed(2)}`;
+                    // Reservamos espacio a la derecha para el precio solo en la primera línea;
+                    // si la descripción es larga, las líneas siguientes usan todo el ancho.
+                    const lineasDesc = doc.splitTextToSize(`${item.desc} x${item.cant}`, anchoUtil - 18);
+                    const lineasDescCompletas = lineasDesc.length > 1
+                        ? [lineasDesc[0], ...doc.splitTextToSize(lineasDesc.slice(1).join(' '), anchoUtil)]
+                        : lineasDesc;
+                    lineasDescCompletas.forEach((l, idx) => {
+                        doc.text(l, 5, y);
+                        if (idx === 0) doc.text(precioTxt, 75, y, { align: 'right' });
+                        y += 4.2;
+                    });
+                    y += 0.8;
                 });
                 separador();
                 linea(`TOTAL: $${m.total.toFixed(2)}`, { size: 12, bold: true, align: 'right', gap: 12 });
@@ -1860,6 +1897,54 @@ function borrarTodo() {
                 localStorage.setItem(key, String(seq - 1));
             }
         }
+
+        // Renumera TODOS los tickets/vales existentes (los de Caja y también los generados
+        // automáticamente por el Sistema de Agua) en orden correlativo desde el #00001, respetando
+        // el orden real en que se crearon (por timestamp). Al final deja el contador apuntando al
+        // último número asignado, para que el siguiente ticket continúe la secuencia sin chocar.
+        // Usa la misma lógica de "borrar y retroceder" ya existente: después de renumerar, si borras
+        // el último ticket, su número se libera igual que siempre.
+        window.renumerarTodosLosTickets = async function () {
+            if (!confirm("Esto va a RENUMERAR todos los tickets/vales existentes en orden correlativo, empezando desde el #00001.\n\n⚠️ Los números que ya estén impresos en tickets viejos ya NO van a coincidir con el número que quede guardado en el sistema (solo cambia el número interno, no el contenido del ticket).\n\n¿Continuar?")) return;
+            if (!navigator.onLine) { alert("⚠️ Necesitas conexión a internet para renumerar (se actualiza en la nube)."); return; }
+
+            const btn = document.getElementById('btn-renumerar-tickets');
+            if (btn) { btn.disabled = true; btn.innerText = 'Renumerando...'; }
+            try {
+                const ordenados = [...movimientos].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                let n = 0;
+                const CHUNK = 450;
+                for (let i = 0; i < ordenados.length; i += CHUNK) {
+                    const batch = writeBatch(db);
+                    ordenados.slice(i, i + CHUNK).forEach(m => {
+                        n++;
+                        m.numeroRecibo = n;
+                        m.numeroFormateado = '#' + String(n).padStart(5, '0');
+                        m.numeroOrigen = 'firestore';
+                        m.numeroPendiente = false;
+                        batch.set(doc(db, 'movimientos', String(m.id)), {
+                            numeroRecibo: m.numeroRecibo,
+                            numeroFormateado: m.numeroFormateado,
+                            numeroOrigen: m.numeroOrigen,
+                            numeroPendiente: m.numeroPendiente,
+                            actualizadoEn: serverTimestamp()
+                        }, { merge: true });
+                    });
+                    await batch.commit();
+                }
+                await setDoc(RECIBOS_COUNTER_REF, { ultimo: n }, { merge: true });
+                localStorage.setItem('caja_movimientos', JSON.stringify(movimientos));
+                if (typeof actualizarDashboard === 'function') actualizarDashboard();
+                const hist = document.getElementById('historial');
+                if (hist && hist.classList.contains('active') && typeof renderHistorial === 'function') renderHistorial();
+                alert(`✅ Se renumeraron ${n} tickets correctamente, del #00001 al #${String(n).padStart(5, '0')}.`);
+            } catch (e) {
+                console.error('Error renumerando tickets:', e);
+                alert("❌ Ocurrió un error al renumerar. Revisa tu conexión e intenta de nuevo.");
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerText = '🔢 Renumerar Todos los Tickets'; }
+            }
+        };
 
         function setSyncText(txt) {
             const el = document.getElementById('sync-status');
