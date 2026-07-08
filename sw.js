@@ -5,7 +5,7 @@
 //  los archivos para forzar la actualización en los teléfonos.
 // ============================================================
 
-const CACHE_VERSION = 'acomaacap-v9-9';
+const CACHE_VERSION = 'acomaacap-v9-10';
 const CACHE_NAME = `acomaacap-cache-${CACHE_VERSION}`;
 
 // Archivos del "app shell" que se guardan de entrada.
