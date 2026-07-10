@@ -411,6 +411,11 @@
     <p style="font-size:0.75rem; margin-top:4px; opacity:0.9;">
         <span id="sync-dot" class="sync-dot dot-connecting"></span><span id="sync-status">Conectando...</span>
     </p>
+    <button id="btn-sincronizar-pendientes" onclick="sincronizarPendientesAhora(true)"
+            title="Forzar sincronización de lo que no ha subido a la nube"
+            style="margin-top:6px; font-size:0.7rem; padding:4px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.6); background:rgba(255,255,255,0.15); color:#fff; cursor:pointer;">
+        🔄 Sincronizar <span id="badge-pendientes" style="display:none; background:#c62828; color:#fff; border-radius:10px; padding:1px 6px; margin-left:4px; font-weight:bold;">0</span>
+    </button>
 </header>
 
 <div class="container">
@@ -4206,39 +4211,122 @@
                 err => { console.error(err); });
         }
 
+        // ================= COLA DE SINCRONIZACIÓN PENDIENTE =================
+        // Todo lo que se guarda o borra en la nube se anota AQUÍ primero (de forma optimista).
+        // Si Firestore confirma, se quita de la lista. Si falla (sin señal, señal débil, error
+        // de IndexedDB en el WebView del APK, etc.), se queda anotado — visible en el botón
+        // "🔄 Sincronizar" del encabezado — para reintentarlo después, ya sea automáticamente
+        // al recuperar señal o a mano. Así ningún cobro se pierde en silencio.
+        const SYNC_QUEUE_KEY = 'sync_pendientes_v1';
+
+        function leerColaPendientes() {
+            try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); }
+            catch (e) { return []; }
+        }
+        function guardarColaPendientes(cola) {
+            localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(cola));
+            actualizarBadgePendientes(cola.length);
+        }
+        function upsertPendiente(coleccion, id, accion, datos) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const ix = cola.findIndex(p => p.clave === clave);
+            const entrada = { clave, coleccion, id, accion, datos: datos || null, intentos: (ix > -1 ? cola[ix].intentos : 0), ultimoError: null, ts: Date.now() };
+            if (ix > -1) cola[ix] = entrada; else cola.push(entrada);
+            guardarColaPendientes(cola);
+        }
+        function quitarPendiente(coleccion, id) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const nueva = cola.filter(p => p.clave !== clave);
+            if (nueva.length !== cola.length) guardarColaPendientes(nueva);
+        }
+        function marcarFalloPendiente(coleccion, id, e) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const ix = cola.findIndex(p => p.clave === clave);
+            if (ix > -1) { cola[ix].intentos++; cola[ix].ultimoError = String((e && e.message) || e); guardarColaPendientes(cola); }
+        }
+        function actualizarBadgePendientes(n) {
+            const badge = document.getElementById('badge-pendientes');
+            if (badge) { badge.innerText = n; badge.style.display = n > 0 ? 'inline-block' : 'none'; }
+        }
+        actualizarBadgePendientes(leerColaPendientes().length);
+
+        // Envío/borrado genérico con reintento: se usa desde todas las funciones syncXxx().
+        function enviarConReintento(coleccion, id, payload) {
+            upsertPendiente(coleccion, id, 'guardar', payload);
+            return setDoc(doc(db, coleccion, String(id)), { ...payload, actualizadoEn: serverTimestamp() }, { merge: true })
+                .then(() => quitarPendiente(coleccion, id))
+                .catch(e => { console.error('Fallo al sincronizar ' + coleccion + '/' + id + ' (queda pendiente):', e); marcarFalloPendiente(coleccion, id, e); });
+        }
+        function borrarConReintento(coleccion, id) {
+            upsertPendiente(coleccion, id, 'borrar', null);
+            return deleteDoc(doc(db, coleccion, String(id)))
+                .then(() => quitarPendiente(coleccion, id))
+                .catch(e => { console.error('Fallo al borrar ' + coleccion + '/' + id + ' (queda pendiente):', e); marcarFalloPendiente(coleccion, id, e); });
+        }
+
+        // Botón manual "🔄 Sincronizar" (y también reintento automático al recuperar señal, o
+        // cada 60s mientras quede algo pendiente, por si el evento 'online' del WebView no dispara).
+        window.sincronizarPendientesAhora = async function (manual) {
+            const cola = leerColaPendientes();
+            if (cola.length === 0) {
+                if (manual) alert('✅ No hay nada pendiente. Todo está sincronizado con la nube.');
+                return;
+            }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                if (manual) alert('📴 Todavía sin conexión (' + cola.length + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
+                return;
+            }
+            if (manual) setSyncText('🔄 Sincronizando pendientes...', 'connecting');
+            let ok = 0, fail = 0;
+            for (const item of cola) {
+                try {
+                    if (item.accion === 'borrar') await deleteDoc(doc(db, item.coleccion, String(item.id)));
+                    else await setDoc(doc(db, item.coleccion, String(item.id)), { ...item.datos, actualizadoEn: serverTimestamp() }, { merge: true });
+                    quitarPendiente(item.coleccion, item.id);
+                    ok++;
+                } catch (e) { fail++; marcarFalloPendiente(item.coleccion, item.id, e); }
+            }
+            if (typeof reconciliarNumerosTicketsPendientes === 'function') { try { await reconciliarNumerosTicketsPendientes(); } catch (e) {} }
+            setSyncText(fail === 0 ? '🟢 Sincronizado' : '🟡 Sincronizado parcial', fail === 0 ? 'synced' : 'error');
+            if (manual) alert(fail === 0 ? ('✅ Se sincronizaron ' + ok + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + ok + ', pero ' + fail + ' fallaron otra vez. Se reintentará solo(a) más tarde.'));
+        };
+        window.addEventListener('online', () => sincronizarPendientesAhora(false));
+        setInterval(() => { if (leerColaPendientes().length > 0) sincronizarPendientesAhora(false); }, 60000);
+
         // ---------- ESCRITURA (app -> nube) ----------
-        window.syncUsuario = (u) => setDoc(doc(db, 'usuarios', String(u.id)), { ...u, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
-        window.eliminarUsuarioNube = (id) => deleteDoc(doc(db, 'usuarios', String(id))).catch(console.error);
-        window.syncRecibo = (r) => setDoc(doc(db, 'recibos', String(r.id)), { ...r, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
-        window.eliminarReciboNube = (id) => deleteDoc(doc(db, 'recibos', String(id))).catch(console.error);
-        window.syncContabilidad = (c) => setDoc(doc(db, 'contabilidad', String(c.id)), { ...c, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
-        window.eliminarContabilidadNube = (id) => deleteDoc(doc(db, 'contabilidad', String(id))).catch(console.error);
+        window.syncUsuario = (u) => enviarConReintento('usuarios', u.id, u);
+        window.eliminarUsuarioNube = (id) => borrarConReintento('usuarios', id);
+        window.syncRecibo = (r) => enviarConReintento('recibos', r.id, r);
+        window.eliminarReciboNube = (id) => borrarConReintento('recibos', id);
+        window.syncContabilidad = (c) => enviarConReintento('contabilidad', c.id, c);
+        window.eliminarContabilidadNube = (id) => borrarConReintento('contabilidad', id);
         // Movimiento de caja generado por un pago de recibo de agua (colección compartida con caja.html)
-        window.syncMovimientoCaja = (m) => setDoc(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
-        window.eliminarMovimientoCajaNube = (id) => deleteDoc(doc(db, 'movimientos', String(id))).catch(console.error);
+        window.syncMovimientoCaja = (m) => enviarConReintento('movimientos', m.id, m);
+        window.eliminarMovimientoCajaNube = (id) => borrarConReintento('movimientos', id);
 
         // Deja el contador atómico de N° de recibo (usado por obtenerSiguienteNumeroRecibo)
         // apuntando a un valor específico. Se usa después de renumerar todos los recibos
         // existentes, para que el siguiente recibo continúe la secuencia sin repetirse.
         window.actualizarContadorRecibos = (valor) => setDoc(doc(db, 'contadores', 'recibos'), { valor }, { merge: true });
 
-        // Contador atómico de N° de recibo (evita duplicados con varios cajeros a la vez)
+        // N° de recibo: SIEMPRE instantáneo y local (nunca se espera a Firestore aquí, para no
+        // atrasar al cajero). En segundo plano, si hay señal, se intenta alinear el contador de
+        // la nube con el número ya asignado — esto es solo para que otros dispositivos tengan
+        // una referencia actualizada; el número del recibo ya quedó fijo y no cambia si esto falla.
         window.obtenerSiguienteNumeroRecibo = async function () {
-            // Si el dispositivo ya sabe que no tiene internet, ni lo intentamos: vamos directo al respaldo local.
-            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                throw new Error('offline');
+            const numero = obtenerSiguienteNumeroLocal();
+            if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+                const ref = doc(db, 'contadores', 'recibos');
+                runTransaction(db, async (tx) => {
+                    const snap = await tx.get(ref);
+                    const actual = snap.exists() ? (snap.data().valor || 0) : 0;
+                    if (numero > actual) tx.set(ref, { valor: numero }, { merge: true });
+                }).catch(e => console.warn('No se pudo alinear el contador de recibos en la nube (no afecta el recibo ya generado):', e));
             }
-            const ref = doc(db, 'contadores', 'recibos');
-            const transaccion = runTransaction(db, async (tx) => {
-                const snap = await tx.get(ref);
-                const siguiente = (snap.exists() ? (snap.data().valor || 0) : 0) + 1;
-                tx.set(ref, { valor: siguiente }, { merge: true });
-                return siguiente;
-            });
-            // Límite de espera: si en 3 segundos no hay respuesta del servidor (señal débil/sin datos),
-            // se cae al contador local en vez de dejar al cajero esperando.
-            const limiteEspera = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-            return await Promise.race([transaccion, limiteEspera]);
+            return numero;
         };
 
         // Retrocede el contador atómico de N° de recibo cuando se elimina un recibo por error,
@@ -4295,15 +4383,13 @@
             return `OFF-${getDeviceIdCaja()}-${String(seq).padStart(3, '0')}`;
         }
 
+        // SIEMPRE instantáneo: el ticket se numera localmente (prefijo "OFF-") sin esperar nunca
+        // a Firestore, haya señal o no. Antes, con señal débil (navigator.onLine en true pero sin
+        // datos reales), esto se quedaba esperando la transacción de Firestore y atrasaba el cobro.
+        // El número real y correlativo se asigna después, en segundo plano y sin bloquear al
+        // cajero, mediante reconciliarNumerosTicketsPendientes() (automático al reconectar, cada
+        // 60s si queda algo pendiente, o al tocar el botón "🔄 Sincronizar").
         async function generarNumeroTicketCaja() {
-            if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
-                try {
-                    const n = await obtenerNumeroTicketFirestore();
-                    return { numero: n, formateado: '#' + String(n).padStart(5, '0'), origen: 'firestore', pendiente: false };
-                } catch (e) {
-                    console.warn('No se pudo generar número de ticket en Firestore, se usa numeración local temporal:', e);
-                }
-            }
             const local = obtenerNumeroTicketLocal();
             return { numero: local, formateado: local, origen: 'local', pendiente: true };
         }
