@@ -190,6 +190,11 @@
         <h1>ACOMAACAP</h1>
         <p>📦 Contabilidad General</p>
         <p id="sync-status" style="font-size:0.75rem; margin-top:4px; opacity:0.85;">🔄 Conectando...</p>
+        <button id="btn-sincronizar-pendientes" onclick="sincronizarPendientesAhora(true)"
+                title="Forzar sincronización de lo que no ha subido a la nube"
+                style="margin-top:6px; font-size:0.7rem; padding:4px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.6); background:rgba(255,255,255,0.15); color:#fff; cursor:pointer;">
+            🔄 Sincronizar <span id="badge-pendientes" style="display:none; background:#c62828; color:#fff; border-radius:10px; padding:1px 6px; margin-left:4px; font-weight:bold;">0</span>
+        </button>
     </header>
 
     <div class="container">
@@ -2025,16 +2030,10 @@ function borrarTodo() {
             return `OFF-${getDeviceId()}-${String(seq).padStart(3, '0')}`;
         }
 
-        // Genera el número de recibo para un nuevo movimiento.
+        // SIEMPRE instantáneo: nunca se espera a Firestore aquí (con señal débil, esto se podía
+        // quedar esperando la transacción y atrasaba el cobro). El número real y correlativo se
+        // asigna después, en segundo plano, mediante reconciliarNumerosPendientes().
         window.generarNumeroRecibo = async function () {
-            if (navigator.onLine) {
-                try {
-                    const n = await obtenerNumeroFirestore();
-                    return { numero: n, formateado: '#' + String(n).padStart(5, '0'), origen: 'firestore', pendiente: false };
-                } catch (e) {
-                    console.warn('No se pudo generar número correlativo en Firestore, se usa numeración local temporal:', e);
-                }
-            }
             const local = obtenerNumeroLocal();
             return { numero: local, formateado: local, origen: 'local', pendiente: true };
         };
@@ -2187,9 +2186,91 @@ function borrarTodo() {
             }
         }
 
+        // ================= COLA DE SINCRONIZACIÓN PENDIENTE =================
+        // Mismo mecanismo que en index.html: cada guardado/borrado se anota primero de forma
+        // optimista y solo se quita si Firestore confirma. Lo que falla queda visible en el
+        // botón "🔄 Sincronizar" del encabezado para reintentar (automático o a mano).
+        const SYNC_QUEUE_KEY = 'sync_pendientes_v1';
+
+        function leerColaPendientes() {
+            try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); }
+            catch (e) { return []; }
+        }
+        function guardarColaPendientes(cola) {
+            localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(cola));
+            actualizarBadgePendientes(cola.length);
+        }
+        function upsertPendiente(coleccion, id, accion, datos) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const ix = cola.findIndex(p => p.clave === clave);
+            const entrada = { clave, coleccion, id, accion, datos: datos || null, intentos: (ix > -1 ? cola[ix].intentos : 0), ultimoError: null, ts: Date.now() };
+            if (ix > -1) cola[ix] = entrada; else cola.push(entrada);
+            guardarColaPendientes(cola);
+        }
+        function quitarPendiente(coleccion, id) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const nueva = cola.filter(p => p.clave !== clave);
+            if (nueva.length !== cola.length) guardarColaPendientes(nueva);
+        }
+        function marcarFalloPendiente(coleccion, id, e) {
+            const cola = leerColaPendientes();
+            const clave = coleccion + ':' + id;
+            const ix = cola.findIndex(p => p.clave === clave);
+            if (ix > -1) { cola[ix].intentos++; cola[ix].ultimoError = String((e && e.message) || e); guardarColaPendientes(cola); }
+        }
+        function actualizarBadgePendientes(n) {
+            const badge = document.getElementById('badge-pendientes');
+            if (badge) { badge.innerText = n; badge.style.display = n > 0 ? 'inline-block' : 'none'; }
+        }
+        actualizarBadgePendientes(leerColaPendientes().length);
+
+        function enviarConReintento(coleccion, id, payload) {
+            upsertPendiente(coleccion, id, 'guardar', payload);
+            return setDoc(doc(db, coleccion, String(id)), { ...payload, actualizadoEn: serverTimestamp() }, { merge: true })
+                .then(() => quitarPendiente(coleccion, id))
+                .catch(e => { console.error('Fallo al sincronizar ' + coleccion + '/' + id + ' (queda pendiente):', e); marcarFalloPendiente(coleccion, id, e); });
+        }
+        function borrarConReintento(coleccion, id) {
+            upsertPendiente(coleccion, id, 'borrar', null);
+            return deleteDoc(doc(db, coleccion, String(id)))
+                .then(() => quitarPendiente(coleccion, id))
+                .catch(e => { console.error('Fallo al borrar ' + coleccion + '/' + id + ' (queda pendiente):', e); marcarFalloPendiente(coleccion, id, e); });
+        }
+
+        // Botón manual "🔄 Sincronizar" (y también reintento automático al recuperar señal, o
+        // cada 60s mientras quede algo pendiente, por si el evento 'online' del WebView no dispara).
+        window.sincronizarPendientesAhora = async function (manual) {
+            const cola = leerColaPendientes();
+            if (cola.length === 0) {
+                if (manual) alert('✅ No hay nada pendiente. Todo está sincronizado con la nube.');
+                return;
+            }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                if (manual) alert('📴 Todavía sin conexión (' + cola.length + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
+                return;
+            }
+            if (manual) setSyncText('🔄 Sincronizando pendientes...');
+            let ok = 0, fail = 0;
+            for (const item of cola) {
+                try {
+                    if (item.accion === 'borrar') await deleteDoc(doc(db, item.coleccion, String(item.id)));
+                    else await setDoc(doc(db, item.coleccion, String(item.id)), { ...item.datos, actualizadoEn: serverTimestamp() }, { merge: true });
+                    quitarPendiente(item.coleccion, item.id);
+                    ok++;
+                } catch (e) { fail++; marcarFalloPendiente(item.coleccion, item.id, e); }
+            }
+            if (typeof reconciliarNumerosPendientes === 'function') { try { await reconciliarNumerosPendientes(); } catch (e) {} }
+            setSyncText(fail === 0 ? '🟢 Sincronizado' : '🟡 Sincronizado parcial');
+            if (manual) alert(fail === 0 ? ('✅ Se sincronizaron ' + ok + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + ok + ', pero ' + fail + ' fallaron otra vez. Se reintentará solo(a) más tarde.'));
+        };
+        window.addEventListener('online', () => sincronizarPendientesAhora(false));
+        setInterval(() => { if (leerColaPendientes().length > 0) sincronizarPendientesAhora(false); }, 60000);
+
         // ---------- ESCRITURA (app -> nube) ----------
-        window.syncMovimiento = (m) => setDoc(doc(db, 'movimientos', String(m.id)), { ...m, actualizadoEn: serverTimestamp() }, { merge: true }).catch(console.error);
-        window.eliminarMovimientoNube = (id) => deleteDoc(doc(db, 'movimientos', String(id))).catch(console.error);
+        window.syncMovimiento = (m) => enviarConReintento('movimientos', m.id, m);
+        window.eliminarMovimientoNube = (id) => borrarConReintento('movimientos', id);
 
         // Sube un backup JSON antiguo de caja completo a Firestore, en lotes de 450 documentos.
         window.subirBackupMovimientosANube = async function (movimientosArr) {
