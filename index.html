@@ -1080,6 +1080,7 @@
         <div class="ticket-row"><span>Subtotal:</span><span id="t-subtotal">$0.00</span></div>
         <div class="ticket-row" id="t-fila-extra" style="display:none;"><span>Trabajo de Calle:</span><span id="t-extra">$0.00</span></div>
         <div class="ticket-row"><span id="t-label-mora">Saldo Ant/Mora:</span><span id="t-mora">$0.00</span></div>
+        <div class="ticket-row" id="t-fila-cant-facturas" style="display:none;"><span>Facturas vencidas:</span><span id="t-cant-facturas">0</span></div>
         <div id="t-fila-mora-detalle" style="display:none; font-size:9px; color:#333; margin:-3px 0 3px;">Corresponde a: <span id="t-mora-detalle"></span></div>
         <div class="ticket-total"><span id="t-label-total">TOTAL</span>: <span id="t-total">$0.00</span></div>
 
@@ -2981,7 +2982,19 @@
                     recibosPendientesAnteriores.forEach(rv => syncRecibo(recibos.find(r => r.id === rv.id)));
                 }
 
-                // 4 y 5. REGISTRO EN CONTABILIDAD (AGUA_CONTABILIDAD) Y CAJA CHICA (CAJA_MOVIMIENTOS)
+                // 4. IMPRIMIR BLUETOOTH DE INMEDIATO
+                // El ticket impreso usa el número del recibo de agua (r.numero), no el número
+                // correlativo de Caja, así que no hace falta esperar la numeración de Caja (que
+                // puede tardar un poco si hay que consultar Firestore) para mandar a imprimir.
+                const tempRecibo = JSON.parse(JSON.stringify(recibos[ix]));
+                // Mora para el ticket es la deuda acumulada, no el campo .mora del recibo
+                tempRecibo.mora = deudaAcumulada.toFixed(2);
+                tempRecibo.moraDetalle = recibosPendientesAnteriores.map(rv => rv.mesFacturado + ' ($' + totalRecibo(rv).toFixed(2) + ')').join(', ');
+                tempRecibo.total = costoReciboActual.toFixed(2);
+                tempRecibo.extra = extraReciboActual.toFixed(2);
+                imprimirBluetooth(tempRecibo); // El PDF se sigue generando manualmente
+
+                // 5 y 6. REGISTRO EN CONTABILIDAD (AGUA_CONTABILIDAD) Y CAJA CHICA (CAJA_MOVIMIENTOS)
                 // IMPORTANTE: se registra UN movimiento POR CADA recibo pagado (no uno combinado), cada uno
                 // con su propio reciboId y su propio monto. Así, si más adelante se borra cualquiera de estos
                 // recibos por separado, el sistema encuentra y descuenta exactamente lo suyo de Caja, sin
@@ -3042,16 +3055,6 @@
 
                 localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
                 localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
-
-                // 6. PREPARAR E IMPRIMIR BLUETOOTH
-                // Clonamos el recibo para enviar la información correcta a la impresora:
-                const tempRecibo = JSON.parse(JSON.stringify(recibos[ix]));
-                // Mora para el ticket es la deuda acumulada, no el campo .mora del recibo
-                tempRecibo.mora = deudaAcumulada.toFixed(2);
-                tempRecibo.moraDetalle = recibosPendientesAnteriores.map(rv => rv.mesFacturado + ' ($' + totalRecibo(rv).toFixed(2) + ')').join(', ');
-                tempRecibo.total = costoReciboActual.toFixed(2);
-                tempRecibo.extra = extraReciboActual.toFixed(2);
-                imprimirBluetooth(tempRecibo); // El PDF se sigue generando manualmente
 
                 actualizarDashboard();
                 actualizarListaRecibosSiVisible();
@@ -3145,6 +3148,25 @@
             return cmd;
         }
 
+        // Ajusta un texto largo a varias líneas de máximo "ancho" caracteres, cortando por palabra
+        // completa (para no truncar información, a diferencia de un simple .substring()).
+        function envolverTextoPlano(texto, ancho) {
+            const palabras = String(texto).split(' ');
+            const lineas = [];
+            let actual = '';
+            palabras.forEach(p => {
+                const prueba = actual ? `${actual} ${p}` : p;
+                if (prueba.length > ancho) {
+                    if (actual) lineas.push(actual);
+                    actual = p;
+                } else {
+                    actual = prueba;
+                }
+            });
+            if (actual) lineas.push(actual);
+            return lineas.length ? lineas : [''];
+        }
+
         // --- IMPRESIÓN BLUETOOTH OPTIMIZADA ---
         function imprimirBluetooth(idOrRecibo) {
             const r = (idOrRecibo && typeof idOrRecibo === 'object') ? idOrRecibo : recibos.find(x => x.id == idOrRecibo);
@@ -3213,7 +3235,11 @@
 
             if(deudaPendiente > 0) {
                 t += `Saldo ${pagado ? 'Incluido' : 'Pendiente'}:  $${deudaPendiente.toFixed(2).padStart(7)}\n`;
-                if (r.moraDetalle) t += `  (Corresponde a: ${r.moraDetalle.substring(0,60)})\n`;
+                if (r.moraDetalle) {
+                    const facturasVencidas = r.moraDetalle.split(', ').filter(Boolean);
+                    t += `  Facturas vencidas: ${facturasVencidas.length}\n`;
+                    envolverTextoPlano(`Corresponde a: ${r.moraDetalle}`, 32).forEach(l => t += `  ${l}\n`);
+                }
             }
 
             t += "\n";
@@ -3299,11 +3325,16 @@
                 : 'Recuerde que tiene 7 dias habiles para pagar su factura despues de haber sido entregada';
 
             const filaMoraDetalle = document.getElementById('t-fila-mora-detalle');
+            const filaCantFacturas = document.getElementById('t-fila-cant-facturas');
             if (deudaPendiente > 0 && r.moraDetalle) {
                 document.getElementById('t-mora-detalle').innerText = r.moraDetalle;
                 filaMoraDetalle.style.display = 'block';
+                const facturasVencidas = r.moraDetalle.split(', ').filter(Boolean);
+                document.getElementById('t-cant-facturas').innerText = facturasVencidas.length;
+                filaCantFacturas.style.display = 'flex';
             } else {
                 filaMoraDetalle.style.display = 'none';
+                filaCantFacturas.style.display = 'none';
             }
 
             const filaExtra = document.getElementById('t-fila-extra');
@@ -3378,7 +3409,12 @@
                 linea(`Subtotal:                $${montoMes.toFixed(2)}`, { size: 8.5, center: false, gap: 4.5 });
                 linea(`${pagado ? 'Saldo Incluido:' : 'Saldo Ant/Mora:'}          $${deudaPendiente.toFixed(2)}`, { size: 8.5, center: false, gap: extra > 0 || (deudaPendiente > 0 && r.moraDetalle) ? 4.5 : 5 });
                 if (deudaPendiente > 0 && r.moraDetalle) {
-                    linea(`Detalle: ${r.moraDetalle}`, { size: 7.5, center: false, gap: 4.5 });
+                    const facturasVencidas = r.moraDetalle.split(', ').filter(Boolean);
+                    linea(`Facturas vencidas: ${facturasVencidas.length}`, { size: 7.5, center: false, gap: 4 });
+                    doc.setFont('courier', 'normal');
+                    doc.setFontSize(7.5);
+                    const detalleLineas = doc.splitTextToSize(`Detalle: ${r.moraDetalle}`, 68);
+                    detalleLineas.forEach(l => { doc.text(l, 5, y); y += 3.6; });
                 }
                 if (extra > 0) {
                     linea(`Extra: $${extra.toFixed(2)}${r.extraDetalle ? ' (' + r.extraDetalle + ')' : ''}`, { size: 8, center: false, gap: 5 });
@@ -4269,14 +4305,22 @@
 
         // Botón manual "🔄 Sincronizar" (y también reintento automático al recuperar señal, o
         // cada 60s mientras quede algo pendiente, por si el evento 'online' del WebView no dispara).
+        function contarNumerosTicketPendientes() {
+            try {
+                const arr = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+                return arr.filter(m => m.numeroPendiente).length;
+            } catch (e) { return 0; }
+        }
         window.sincronizarPendientesAhora = async function (manual) {
             const cola = leerColaPendientes();
-            if (cola.length === 0) {
+            const numerosPendientes = contarNumerosTicketPendientes();
+
+            if (cola.length === 0 && numerosPendientes === 0) {
                 if (manual) alert('✅ No hay nada pendiente. Todo está sincronizado con la nube.');
                 return;
             }
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                if (manual) alert('📴 Todavía sin conexión (' + cola.length + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
+                if (manual) alert('📴 Todavía sin conexión (' + (cola.length + numerosPendientes) + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
                 return;
             }
             if (manual) setSyncText('🔄 Sincronizando pendientes...', 'connecting');
@@ -4289,12 +4333,24 @@
                     ok++;
                 } catch (e) { fail++; marcarFalloPendiente(item.coleccion, item.id, e); }
             }
-            if (typeof reconciliarNumerosTicketsPendientes === 'function') { try { await reconciliarNumerosTicketsPendientes(); } catch (e) {} }
-            setSyncText(fail === 0 ? '🟢 Sincronizado' : '🟡 Sincronizado parcial', fail === 0 ? 'synced' : 'error');
-            if (manual) alert(fail === 0 ? ('✅ Se sincronizaron ' + ok + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + ok + ', pero ' + fail + ' fallaron otra vez. Se reintentará solo(a) más tarde.'));
+            let numerosOk = 0, numerosFail = false;
+            if (typeof reconciliarNumerosTicketsPendientes === 'function') {
+                try {
+                    numerosOk = numerosPendientes;
+                    await reconciliarNumerosTicketsPendientes();
+                } catch (e) { numerosFail = true; }
+            }
+            setSyncText((fail === 0 && !numerosFail) ? '🟢 Sincronizado' : '🟡 Sincronizado parcial', (fail === 0 && !numerosFail) ? 'synced' : 'error');
+            if (manual) {
+                const totalOk = ok + numerosOk;
+                const totalFail = fail + (numerosFail ? 1 : 0);
+                alert(totalFail === 0 ? ('✅ Se sincronizaron ' + totalOk + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + totalOk + ', pero algo falló otra vez. Se reintentará solo(a) más tarde.'));
+            }
         };
         window.addEventListener('online', () => sincronizarPendientesAhora(false));
-        setInterval(() => { if (leerColaPendientes().length > 0) sincronizarPendientesAhora(false); }, 60000);
+        setInterval(() => {
+            if (leerColaPendientes().length > 0 || contarNumerosTicketPendientes() > 0) sincronizarPendientesAhora(false);
+        }, 60000);
 
         // ---------- ESCRITURA (app -> nube) ----------
         window.syncUsuario = (u) => enviarConReintento('usuarios', u.id, u);
@@ -4383,13 +4439,25 @@
             return `OFF-${getDeviceIdCaja()}-${String(seq).padStart(3, '0')}`;
         }
 
-        // SIEMPRE instantáneo: el ticket se numera localmente (prefijo "OFF-") sin esperar nunca
-        // a Firestore, haya señal o no. Antes, con señal débil (navigator.onLine en true pero sin
-        // datos reales), esto se quedaba esperando la transacción de Firestore y atrasaba el cobro.
-        // El número real y correlativo se asigna después, en segundo plano y sin bloquear al
-        // cajero, mediante reconciliarNumerosTicketsPendientes() (automático al reconectar, cada
-        // 60s si queda algo pendiente, o al tocar el botón "🔄 Sincronizar").
+        // Con internet real y buena señal: intenta obtener el número correlativo de Firestore de
+        // una vez (el ticket sale con su número final, sin esperar el ciclo automático). Si no hay
+        // respuesta a tiempo (señal débil/inestable) o no hay conexión, no se atrasa el cobro: se
+        // usa un número temporal local (prefijo "OFF-") que se reconcilia después en segundo plano,
+        // sin bloquear al cajero, mediante reconciliarNumerosTicketsPendientes() (automático al
+        // reconectar, cada 60s si queda algo pendiente, o al tocar el botón "🔄 Sincronizar").
         async function generarNumeroTicketCaja() {
+            if (typeof navigator !== 'undefined' && navigator.onLine) {
+                try {
+                    const n = await Promise.race([
+                        obtenerNumeroTicketFirestore(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500))
+                    ]);
+                    const formateado = '#' + String(n).padStart(5, '0');
+                    return { numero: n, formateado, origen: 'firestore', pendiente: false };
+                } catch (e) {
+                    // Sin respuesta a tiempo: seguimos con el número local, se reconcilia después.
+                }
+            }
             const local = obtenerNumeroTicketLocal();
             return { numero: local, formateado: local, origen: 'local', pendiente: true };
         }
