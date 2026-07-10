@@ -2030,10 +2030,24 @@ function borrarTodo() {
             return `OFF-${getDeviceId()}-${String(seq).padStart(3, '0')}`;
         }
 
-        // SIEMPRE instantáneo: nunca se espera a Firestore aquí (con señal débil, esto se podía
-        // quedar esperando la transacción y atrasaba el cobro). El número real y correlativo se
-        // asigna después, en segundo plano, mediante reconciliarNumerosPendientes().
+        // Con internet real y buena señal: intenta obtener el número correlativo de Firestore
+        // de una vez (así el ticket sale con su número final, sin esperar el ciclo automático).
+        // Si no hay respuesta en poco tiempo (señal débil/inestable) o no hay conexión, no se
+        // atrasa el cobro: se usa un número temporal local "OFF-..." que se reconcilia después
+        // en segundo plano, mediante reconciliarNumerosPendientes().
         window.generarNumeroRecibo = async function () {
+            if (typeof navigator !== 'undefined' && navigator.onLine) {
+                try {
+                    const n = await Promise.race([
+                        obtenerNumeroFirestore(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+                    ]);
+                    const formateado = '#' + String(n).padStart(5, '0');
+                    return { numero: n, formateado, origen: 'firestore', pendiente: false };
+                } catch (e) {
+                    // Sin respuesta a tiempo: seguimos con el número local, se reconcilia después.
+                }
+            }
             const local = obtenerNumeroLocal();
             return { numero: local, formateado: local, origen: 'local', pendiente: true };
         };
@@ -2243,12 +2257,14 @@ function borrarTodo() {
         // cada 60s mientras quede algo pendiente, por si el evento 'online' del WebView no dispara).
         window.sincronizarPendientesAhora = async function (manual) {
             const cola = leerColaPendientes();
-            if (cola.length === 0) {
+            const numerosPendientes = (typeof movimientos !== 'undefined') ? movimientos.filter(m => m.numeroPendiente).length : 0;
+
+            if (cola.length === 0 && numerosPendientes === 0) {
                 if (manual) alert('✅ No hay nada pendiente. Todo está sincronizado con la nube.');
                 return;
             }
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                if (manual) alert('📴 Todavía sin conexión (' + cola.length + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
+                if (manual) alert('📴 Todavía sin conexión (' + (cola.length + numerosPendientes) + ' pendiente(s)). Intenta de nuevo cuando tengas señal.');
                 return;
             }
             if (manual) setSyncText('🔄 Sincronizando pendientes...');
@@ -2261,12 +2277,25 @@ function borrarTodo() {
                     ok++;
                 } catch (e) { fail++; marcarFalloPendiente(item.coleccion, item.id, e); }
             }
-            if (typeof reconciliarNumerosPendientes === 'function') { try { await reconciliarNumerosPendientes(); } catch (e) {} }
-            setSyncText(fail === 0 ? '🟢 Sincronizado' : '🟡 Sincronizado parcial');
-            if (manual) alert(fail === 0 ? ('✅ Se sincronizaron ' + ok + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + ok + ', pero ' + fail + ' fallaron otra vez. Se reintentará solo(a) más tarde.'));
+            let numerosOk = 0, numerosFail = false;
+            if (typeof reconciliarNumerosPendientes === 'function') {
+                try {
+                    numerosOk = numerosPendientes;
+                    await reconciliarNumerosPendientes();
+                } catch (e) { numerosFail = true; }
+            }
+            setSyncText((fail === 0 && !numerosFail) ? '🟢 Sincronizado' : '🟡 Sincronizado parcial');
+            if (manual) {
+                const totalOk = ok + numerosOk;
+                const totalFail = fail + (numerosFail ? 1 : 0);
+                alert(totalFail === 0 ? ('✅ Se sincronizaron ' + totalOk + ' elemento(s) pendiente(s).') : ('⚠️ Se sincronizaron ' + totalOk + ', pero algo falló otra vez. Se reintentará solo(a) más tarde.'));
+            }
         };
         window.addEventListener('online', () => sincronizarPendientesAhora(false));
-        setInterval(() => { if (leerColaPendientes().length > 0) sincronizarPendientesAhora(false); }, 60000);
+        setInterval(() => {
+            const hayNumerosPendientes = (typeof movimientos !== 'undefined') && movimientos.some(m => m.numeroPendiente);
+            if (leerColaPendientes().length > 0 || hayNumerosPendientes) sincronizarPendientesAhora(false);
+        }, 60000);
 
         // ---------- ESCRITURA (app -> nube) ----------
         window.syncMovimiento = (m) => enviarConReintento('movimientos', m.id, m);
