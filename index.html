@@ -111,10 +111,19 @@
         .menu-card:active { transform: scale(0.96); }
         .menu-icon { font-size: 2.8rem; display: block; margin-bottom: 12px; }
         .menu-label { font-weight: 800; color: #333; font-size: 1rem; display: block; }
-        .menu-card-blue { border-bottom-color: var(--primary); }
-        .menu-card-green { border-bottom-color: var(--secondary); }
-        .menu-card-orange { border-bottom-color: var(--warning); }
-        .menu-card-purple { border-bottom-color: #7b1fa2; }
+        .menu-card-blue { border-bottom-color: var(--primary); background: linear-gradient(180deg, #ffffff, #d4ecfd); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        .menu-card-blue .menu-label { color: #333; }
+        .menu-card-orange { border-bottom-color: var(--warning); background: linear-gradient(180deg, #ffffff, #ffe9d1); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        .menu-card-orange .menu-label { color: #333; }
+        .menu-card-purple { border-bottom-color: #7b1fa2; background: linear-gradient(180deg, #ffffff, #f0dcf7); box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        .menu-card-purple .menu-label { color: #333; }
+        .menu-card-destacado {
+            background: linear-gradient(135deg, #00963e, #00c853);
+            border-bottom-color: #00752f;
+            box-shadow: 0 6px 18px rgba(0,150,62,0.45);
+        }
+        .menu-card-destacado .menu-label { color: #fff; }
+        .menu-card-destacado .menu-icon { filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15)); }
 
         /* Botones flotantes de navegación (Atrás / Menú principal) */
         .btn-nav-flotante {
@@ -422,15 +431,15 @@
 
     <div id="menu-principal" class="section active">
         <div style="text-align:center; margin: 5px 0 25px;">
-            <h2 style="margin:0; color:var(--dark);">💧 ACOMAACAP</h2>
+            <h2 onclick="tocarTituloSecreto()" style="margin:0; color:var(--dark); user-select:none;">💧 ACOMAACAP</h2>
             <p style="color:#888; margin:6px 0 0; font-size:0.9rem;">Selecciona una opción</p>
         </div>
         <div class="menu-grid">
-            <div class="menu-card menu-card-blue" onclick="mostrarSeccion('menu-contabilidad')">
+            <div id="menu-card-contabilidad" class="menu-card menu-card-blue" style="display:none;" onclick="mostrarSeccion('menu-contabilidad')">
                 <span class="menu-icon">📊</span>
                 <span class="menu-label">Contabilidad</span>
             </div>
-            <div class="menu-card menu-card-green" onclick="mostrarSeccion('facturar')">
+            <div class="menu-card menu-card-destacado" onclick="mostrarSeccion('facturar')">
                 <span class="menu-icon">🧾</span>
                 <span class="menu-label">Generar Recibo</span>
             </div>
@@ -729,6 +738,7 @@
         <p style="text-align:center; color:#888; margin-top:-10px; font-size:0.85rem;">Busca al cliente y cobra sus recibos pendientes directamente.</p>
 
         <button type="button" class="btn-recaudacion" onclick="mostrarRecaudacion()" style="max-width:340px; margin:0 auto 10px;">📊 Ver Recaudación</button>
+        <button type="button" class="btn-recaudacion" onclick="mostrarSeccion('contabilidad')" style="max-width:340px; margin:0 auto 10px; background:linear-gradient(135deg, #2e7d32, #66bb6a);">📈 Ver Ingresos</button>
         <p style="text-align:center; margin:0 0 20px;">
             <a href="javascript:void(0)" onclick="cambiarPasswordCobrar()" style="font-size:0.78rem; color:#888; text-decoration:underline;">🔑 Cambiar contraseña de acceso a Cobrar</a>
         </p>
@@ -891,8 +901,9 @@
         </div>
 
         <div id="cont-detalle-panel" style="display:none; margin-bottom:20px; border-radius:10px; overflow:hidden; border:1px solid #eee;">
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f5f5f5;">
-                <strong id="cont-detalle-titulo" style="font-size:0.92rem;"></strong>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f5f5f5; gap:10px;">
+                <strong id="cont-detalle-titulo" style="font-size:0.92rem; flex:1;"></strong>
+                <button class="btn btn-primary" style="margin:0; padding:6px 10px; font-size:0.78rem; width:auto; white-space:nowrap;" onclick="imprimirDetalleTipoIngreso()">🖨️ Imprimir</button>
                 <span onclick="cerrarDetalleTipoIngreso()" style="cursor:pointer; font-size:1.1rem; color:#888;">✖️</span>
             </div>
             <table style="margin:0;">
@@ -1172,6 +1183,31 @@
             cargarFiltrosFecha(); actualizarDashboard(); cargarSelectUsuarios();
         });
 
+        // ============ TRUCO SECRETO: REVELAR BOTÓN "CONTABILIDAD" ============
+        // El botón de Contabilidad en el Menú Principal está oculto por defecto.
+        // Tocando 5 veces seguidas (en menos de 3 segundos) el título "💧 ACOMAACAP"
+        // vuelve a aparecer. Al recargar la página vuelve a quedar oculto.
+        let toquesSecretos = 0;
+        let toqueSecretoTimeout = null;
+
+        function tocarTituloSecreto() {
+            toquesSecretos++;
+            if (toqueSecretoTimeout) clearTimeout(toqueSecretoTimeout);
+            toqueSecretoTimeout = setTimeout(() => { toquesSecretos = 0; }, 3000);
+
+            if (toquesSecretos >= 5) {
+                toquesSecretos = 0;
+                clearTimeout(toqueSecretoTimeout);
+                const boton = document.getElementById('menu-card-contabilidad');
+                if (boton) {
+                    const yaVisible = boton.style.display !== 'none';
+                    boton.style.display = yaVisible ? 'none' : '';
+                    alert(yaVisible ? '🔒 Contabilidad ocultada de nuevo.' : '🔓 Contabilidad desbloqueada.');
+                }
+            }
+        }
+        // ============================================================
+
         // ============ CONTROL DE ACCESO POR CONTRASEÑA ============
         // Contraseña configurable desde Ajustes (se guarda en este dispositivo).
         // Si nunca se ha configurado, se usa esta por defecto la primera vez.
@@ -1309,8 +1345,17 @@
                 return;
             }
 
+            // "Ingresos" (contabilidad) es la única pantalla de Contabilidad a la que también
+            // se puede entrar con la contraseña de Cobrar (para que quien cobra vea los ingresos
+            // sin necesitar la contraseña general de Contabilidad/Ajustes). Solo da acceso a esa
+            // pantalla: desde Ingresos no hay enlaces a Usuarios, Historial, Fondos Calle ni Caja.
+            if (id === 'contabilidad' && !skipCheck && !accesoAdminDesbloqueado() && !accesoCobrarDesbloqueado()) {
+                verificarAccesoAdmin(() => mostrarSeccion(id, true));
+                return;
+            }
+
             // Interceptamos el acceso a cualquier sección protegida (todo excepto Buscar y Recibo)
-            if (!SECCIONES_LIBRES.includes(id) && !skipCheck && !accesoAdminDesbloqueado()) {
+            if (id !== 'contabilidad' && !SECCIONES_LIBRES.includes(id) && !skipCheck && !accesoAdminDesbloqueado()) {
                 verificarAccesoAdmin(() => mostrarSeccion(id, true));
                 return; // Detenemos la ejecución
             }
