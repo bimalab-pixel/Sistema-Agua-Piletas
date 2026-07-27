@@ -620,6 +620,15 @@
                 <label>N° Contador</label>
                 <input type="tel" id="u-contador" placeholder="Ej: 12345">
 
+                <label style="display:flex; align-items:center; gap:8px; margin-top:16px; cursor:pointer; font-weight:600;">
+                    <input type="checkbox" id="u-cuota-fija" style="width:auto; margin:0;" onchange="toggleCampoCuotaFijaUsuario()">
+                    <span>⚠️ Cuota fija (contador dañado)</span>
+                </label>
+                <div id="wrap-monto-cuota-fija-usuario" style="display:none;">
+                    <label>Monto mensual de cuota fija ($)</label>
+                    <input type="number" id="u-monto-cuota-fija" placeholder="Ej: 5.00" step="0.01">
+                </div>
+
                 <label>Dirección (Caserío)</label>
                 <input type="text" id="u-direccion" readonly style="background:#eee; color:#555;">
 
@@ -697,7 +706,7 @@
             </div>
         </div>
 
-        <button type="button" id="btn-cambiar-cliente" class="btn-outline" onclick="irAtras()" style="display:none; width:auto; margin-bottom:15px;">🔄 Cambiar Cliente</button>
+        <button type="button" id="btn-cambiar-cliente" onclick="irAtras()" style="display:none; width:auto; margin:0 0 18px; padding:10px 20px; border:none; border-radius:30px; background:linear-gradient(135deg, #ec407a, #ad1457); color:white; font-weight:800; font-size:0.9rem; text-align:center; box-shadow:0 4px 10px rgba(173,20,87,0.35); cursor:pointer; transition:transform 0.15s;" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">🔄 Cambiar Cliente</button>
 
         <input type="hidden" id="f-usuario-id">
 
@@ -709,14 +718,43 @@
                 <span>Ubicación: <strong id="f-display-dir">---</strong></span>
             </div>
 
-            <div class="dash-grid">
-                <div><label>Lectura Anterior</label><input type="number" id="f-lectura-ant" oninput="calcularTotales()" value="0" pattern="\d*"></div>
-                <div><label>Lectura Actual</label><input type="number" id="f-lectura-act" oninput="calcularTotales()" pattern="\d*"></div>
+            <div id="factura-historial-wrap" style="display:none; margin-bottom:20px;">
+                <button type="button" style="width:100%; margin:0; border:none; border-radius:14px; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer; font-family:inherit; background:linear-gradient(135deg, #8e24aa, #4a148c); color:white; box-shadow:0 6px 16px rgba(74,20,140,0.35); transition:transform 0.15s;" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'" onclick="toggleHistorialFactura()">
+                    <span style="display:flex; align-items:center; gap:10px; text-align:left;">
+                        <span style="font-size:1.4rem; background:rgba(255,255,255,0.2); width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🧾</span>
+                        <span style="line-height:1.2;">
+                            <span style="display:block; font-weight:800; font-size:0.95rem;">Recibos emitidos a este cliente</span>
+                            <span style="display:block; font-size:0.72rem; opacity:0.85;">Toca para reimprimir por Bluetooth o PDF</span>
+                        </span>
+                    </span>
+                    <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <span id="badge-historial-factura" style="background:white; color:#4a148c; font-weight:800; font-size:0.85rem; min-width:26px; text-align:center; padding:4px 9px; border-radius:20px;">0</span>
+                        <span id="flecha-toggle-historial-factura" style="font-size:1.1rem; display:inline-block; transition:transform 0.2s;">▾</span>
+                    </span>
+                </button>
+                <div id="factura-historial-lista" style="display:none; margin-top:10px;"></div>
             </div>
-            <label>Consumo (m³)</label>
-            <input type="text" id="f-consumo" readonly style="background: #f5f5f5; font-weight: bold; color:#333;">
-            <label>Precio Unitario ($)</label>
-            <input type="number" id="f-precio" value="0.80" oninput="calcularTotales()" step="0.01">
+
+            <div id="factura-cuota-fija-banner" style="display:none; background:#fff3e0; border-left:4px solid #e65100; padding:12px 14px; border-radius:8px; margin-bottom:15px; font-size:0.85rem; color:#bf360c; font-weight:600;">
+                ⚠️ Cuota fija: el contador de este cliente está dañado. Se factura un monto mensual fijo en vez de por consumo.
+            </div>
+
+            <div id="factura-lecturas-normales">
+                <div class="dash-grid">
+                    <div><label>Lectura Anterior</label><input type="number" id="f-lectura-ant" oninput="calcularTotales()" value="0" pattern="\d*"></div>
+                    <div><label>Lectura Actual</label><input type="number" id="f-lectura-act" oninput="calcularTotales()" pattern="\d*"></div>
+                </div>
+                <label>Consumo (m³)</label>
+                <input type="text" id="f-consumo" readonly style="background: #f5f5f5; font-weight: bold; color:#333;">
+                <label>Precio Unitario ($)</label>
+                <input type="number" id="f-precio" value="0.80" oninput="calcularTotales()" step="0.01">
+            </div>
+
+            <div id="factura-cuota-fija-campo" style="display:none;">
+                <label>Monto de Cuota Fija ($)</label>
+                <input type="number" id="f-cuota-fija-monto" value="0.00" step="0.01" oninput="calcularTotales()">
+            </div>
+
             <label>Mora / Saldo ($)</label>
             <input type="number" id="f-mora" value="0.00" readonly style="background: #f5f5f5; font-weight: bold; color:#333;" step="0.01">
             <label>Trabajo de Calle / Cargos Extra ($)</label>
@@ -784,7 +822,7 @@
             </div>
         </div>
 
-        <button type="button" id="btn-cambiar-cliente-cobrar" class="btn-outline" onclick="irAtras()" style="display:none; width:auto; margin-bottom:15px;">🔄 Cambiar Cliente</button>
+        <button type="button" id="btn-cambiar-cliente-cobrar" onclick="irAtras()" style="display:none; width:auto; margin:0 0 18px; padding:10px 20px; border:none; border-radius:30px; background:linear-gradient(135deg, #ec407a, #ad1457); color:white; font-weight:800; font-size:0.9rem; text-align:center; box-shadow:0 4px 10px rgba(173,20,87,0.35); cursor:pointer; transition:transform 0.15s;" onmousedown="this.style.transform='scale(0.96)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">🔄 Cambiar Cliente</button>
 
         <input type="hidden" id="c-usuario-id">
 
@@ -835,6 +873,9 @@
 
     <div id="historial" class="section">
         <h2>📂 Historial</h2>
+        <div style="margin-bottom:10px;">
+            <input type="text" id="filtro-busqueda" placeholder="🔍 Buscar por nombre..." oninput="onBuscarHistorialInput()" style="width:100%; padding:12px 14px; border-radius:12px; border:1px solid #ddd; font-size:0.95rem;">
+        </div>
         <div class="filter-bar" style="grid-template-columns: 1fr 1fr 1fr;">
             <select id="filtro-anio" onchange="renderizarRecibos()"></select>
             <select id="filtro-mes" onchange="renderizarRecibos()">
@@ -849,6 +890,18 @@
                 <option value="pendiente">Debe</option>
                 <option value="pagado">Pagó</option>
             </select>
+        </div>
+        <div id="historial-resumen" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:12px 0 15px;">
+            <div style="background:#e8f5e9; border-radius:10px; padding:10px 8px; text-align:center;">
+                <div style="font-size:0.72rem; font-weight:700; color:#2e7d32;">✅ PAGADOS</div>
+                <div id="resumen-count-pagados" style="font-size:1.4rem; font-weight:800; color:#2e7d32;">0</div>
+                <div id="resumen-total-pagados" style="font-size:0.75rem; color:#2e7d32;">$0.00</div>
+            </div>
+            <div style="background:#ffebee; border-radius:10px; padding:10px 8px; text-align:center;">
+                <div style="font-size:0.72rem; font-weight:700; color:var(--danger);">⚠️ DEBEN</div>
+                <div id="resumen-count-deben" style="font-size:1.4rem; font-weight:800; color:var(--danger);">0</div>
+                <div id="resumen-total-deben" style="font-size:0.75rem; color:var(--danger);">$0.00</div>
+            </div>
         </div>
         <div id="lista-recibos"></div>
     </div>
@@ -873,6 +926,15 @@
             <select id="cont-dia" onchange="actualizarResumenContable()">
                 <option value="todos">Todo el Mes</option>
             </select>
+        </div>
+
+        <div style="background:#e1f5fe; border-radius:10px; padding:10px 12px; margin-top:8px;">
+            <label style="color:#0277bd; font-size:0.85rem; display:block; margin-bottom:6px;">O selecciona un periodo específico (rango de fechas):</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <input type="date" id="cont-fecha-desde" onchange="actualizarResumenContable()">
+                <input type="date" id="cont-fecha-hasta" onchange="actualizarResumenContable()">
+            </div>
+            <button type="button" class="btn btn-outline" style="margin-top:8px; width:100%;" onclick="quitarRangoContable()">✖️ Quitar rango y usar Año/Mes/Día</button>
         </div>
 
         <div class="card card-green" style="text-align: center; border-left:none; border-top: 6px solid var(--secondary);">
@@ -907,7 +969,7 @@
                 <span onclick="cerrarDetalleTipoIngreso()" style="cursor:pointer; font-size:1.1rem; color:#888;">✖️</span>
             </div>
             <table style="margin:0;">
-                <thead><tr><th>Fecha</th><th>Cliente</th><th>Monto</th></tr></thead>
+                <thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th>Monto</th></tr></thead>
                 <tbody id="cont-detalle-tabla"></tbody>
             </table>
             <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#fafafa; font-weight:800; border-top:2px solid #ddd;">
@@ -966,13 +1028,13 @@
 
         <h4 style="margin:20px 0 10px;">📍 Desglose por Caserío (mismo periodo)</h4>
         <table>
-            <thead><tr><th>Caserío</th><th>Monto</th></tr></thead>
+            <thead><tr><th>N°</th><th>Caserío</th><th>Monto</th></tr></thead>
             <tbody id="fc-tabla-caserios"></tbody>
         </table>
 
         <h4 style="margin:20px 0 10px;">🧾 Detalle de Movimientos <span style="font-weight:normal; font-size:0.78rem; color:#888;">(según caserío elegido arriba)</span></h4>
         <table>
-            <thead><tr><th>Fecha</th><th>Cliente</th><th>Caserío</th><th>Monto</th></tr></thead>
+            <thead><tr><th>N°</th><th>Fecha</th><th>Cliente</th><th>Caserío</th><th>Monto</th></tr></thead>
             <tbody id="fc-tabla-detalle"></tbody>
         </table>
     </div>
@@ -1083,10 +1145,11 @@
             <p style="font-size:12px;"><strong>Contador:</strong> <span id="t-contador">0000</span></p>
         </div>
         <div class="ticket-row"><span>Periodo:</span><span id="t-periodo">--- al ---</span></div>
-        <div class="ticket-row"><span>Lect. Actual:</span><span id="t-lectura-act">0</span></div>
-        <div class="ticket-row"><span>Lect. Anterior:</span><span id="t-lectura-ant">0</span></div>
-        <div class="ticket-row"><span>Consumo:</span><span id="t-consumo">0</span></div>
-        <div class="ticket-row"><span>Precio:</span><span id="t-precio">$0.80</span></div>
+        <div class="ticket-row" id="t-fila-lect-act"><span>Lect. Actual:</span><span id="t-lectura-act">0</span></div>
+        <div class="ticket-row" id="t-fila-lect-ant"><span>Lect. Anterior:</span><span id="t-lectura-ant">0</span></div>
+        <div class="ticket-row" id="t-fila-consumo"><span>Consumo:</span><span id="t-consumo">0</span></div>
+        <div class="ticket-row" id="t-fila-precio"><span>Precio:</span><span id="t-precio">$0.80</span></div>
+        <div id="t-fila-cuota-fija" style="display:none; font-weight:bold; text-align:center; padding:3px 0;">⚠️ CUOTA FIJA (contador dañado)</div>
         <div style="border-top: 1px dashed #ccc; margin: 2px 0;"></div>
         <div class="ticket-row"><span>Subtotal:</span><span id="t-subtotal">$0.00</span></div>
         <div class="ticket-row" id="t-fila-extra" style="display:none;"><span>Trabajo de Calle:</span><span id="t-extra">$0.00</span></div>
@@ -1535,6 +1598,9 @@
             document.getElementById('u-id').value = '';
             document.getElementById('u-nombre').value = '';
             document.getElementById('u-contador').value = '';
+            document.getElementById('u-cuota-fija').checked = false;
+            document.getElementById('u-monto-cuota-fija').value = '';
+            toggleCampoCuotaFijaUsuario();
             // Fijamos la dirección con el caserío actual y la bloqueamos
             document.getElementById('u-direccion').value = caserioSeleccionado;
 
@@ -1544,17 +1610,30 @@
 
         function ocultarFormUsuario() { document.getElementById('form-usuario').style.display = 'none'; }
 
+        // Muestra/oculta el campo de monto cuando se marca/desmarca "Cuota fija" en el form de usuario
+        function toggleCampoCuotaFijaUsuario() {
+            document.getElementById('wrap-monto-cuota-fija-usuario').style.display =
+                document.getElementById('u-cuota-fija').checked ? 'block' : 'none';
+        }
+
         function guardarUsuario() {
             const n = document.getElementById('u-nombre').value; const c = document.getElementById('u-contador').value;
             const d = document.getElementById('u-direccion').value; // Toma el valor fijo
+            const cuotaFija = document.getElementById('u-cuota-fija').checked;
+            const montoCuotaFija = parseFloat(document.getElementById('u-monto-cuota-fija').value) || 0;
 
             if(!n || !c) return alert("Faltan datos");
+            if(cuotaFija && montoCuotaFija <= 0) return alert("Ingrese el monto mensual de la cuota fija.");
 
             let usuarioGuardado;
             if (usuarioEditandoId) {
                 const ix = usuarios.findIndex(u => u.id === usuarioEditandoId);
-                if(ix > -1) { usuarios[ix].nombre = n; usuarios[ix].contador = c; usuarios[ix].direccion = d; usuarioGuardado = usuarios[ix]; }
-            } else { usuarioGuardado = { id: Date.now(), nombre: n, contador: c, direccion: d }; usuarios.push(usuarioGuardado); }
+                if(ix > -1) {
+                    usuarios[ix].nombre = n; usuarios[ix].contador = c; usuarios[ix].direccion = d;
+                    usuarios[ix].cuotaFija = cuotaFija; usuarios[ix].montoCuotaFija = montoCuotaFija;
+                    usuarioGuardado = usuarios[ix];
+                }
+            } else { usuarioGuardado = { id: Date.now(), nombre: n, contador: c, direccion: d, cuotaFija, montoCuotaFija }; usuarios.push(usuarioGuardado); }
             localStorage.setItem('agua_usuarios', JSON.stringify(usuarios)); ocultarFormUsuario(); renderizarUsuariosCaserio(); cargarSelectUsuarios();
             if(usuarioGuardado && typeof syncUsuario === 'function') syncUsuario(usuarioGuardado);
         }
@@ -1565,6 +1644,9 @@
             document.getElementById('u-nombre').value = u.nombre;
             document.getElementById('u-contador').value = u.contador;
             document.getElementById('u-direccion').value = u.direccion;
+            document.getElementById('u-cuota-fija').checked = !!u.cuotaFija;
+            document.getElementById('u-monto-cuota-fija').value = u.montoCuotaFija || '';
+            toggleCampoCuotaFijaUsuario();
             document.getElementById('titulo-form-usuario').innerText = "Editar Datos";
         }
 
@@ -1753,6 +1835,9 @@
             document.getElementById('f-precio').value = r.precioUnidad;
             document.getElementById('f-mora').value = r.mora;
             document.getElementById('f-extra').value = r.extra;
+            if (r.esCuotaFija) {
+                document.getElementById('f-cuota-fija-monto').value = parseFloat(r.total).toFixed(2);
+            }
             if (typeof calcularTotales === 'function') calcularTotales();
             const btnGuardar = document.getElementById('btn-guardar-recibo');
             if (btnGuardar) btnGuardar.innerText = '💾 Actualizar Recibo';
@@ -1825,12 +1910,22 @@
             document.getElementById('f-total-pagar').innerText = '$0.00';
             document.getElementById('f-mora').value = 0.00;
             document.getElementById('f-extra').value = 0.00;
+            document.getElementById('f-cuota-fija-monto').value = '0.00';
             document.getElementById('extra-detalle-nota').style.display = 'none';
             document.getElementById('alerta-deuda').style.display = 'none';
 
             if(u) {
                 document.getElementById('f-display-contador').innerText = u.contador;
                 document.getElementById('f-display-dir').innerText = u.direccion || '';
+
+                // Cliente con contador dañado: se factura cuota fija en vez de por lectura/consumo.
+                const esCuotaFija = !!u.cuotaFija;
+                document.getElementById('factura-cuota-fija-banner').style.display = esCuotaFija ? 'block' : 'none';
+                document.getElementById('factura-lecturas-normales').style.display = esCuotaFija ? 'none' : 'block';
+                document.getElementById('factura-cuota-fija-campo').style.display = esCuotaFija ? 'block' : 'none';
+                if (esCuotaFija) {
+                    document.getElementById('f-cuota-fija-monto').value = (parseFloat(u.montoCuotaFija) || 0).toFixed(2);
+                }
 
                 // Cliente cargado: cerramos el buscador por caserío y mostramos el formulario del recibo
                 const browserFacturaVisible = document.getElementById('factura-caserio-browser').style.display !== 'none';
@@ -1863,14 +1958,110 @@
                 // Cargos pendientes de Trabajo de Calle: se precargan automáticamente en este recibo
                 // (se refleja lo agregado desde el módulo "Trabajo de Calle", y se puede editar aquí mismo)
                 renderizarCargosEnFactura();
+
+                // Historial de recibos ya emitidos a este cliente, con reimpresión Bluetooth/PDF
+                // (disponible aquí porque "Facturación" y "Buscar" son secciones libres, sin
+                // contraseña de administrador, a diferencia de "Historial").
+                renderizarHistorialFactura(id);
             } else {
                 document.getElementById('f-display-contador').innerText = '---';
                 document.getElementById('f-display-dir').innerText = '---';
+                document.getElementById('factura-cuota-fija-banner').style.display = 'none';
+                document.getElementById('factura-lecturas-normales').style.display = 'block';
+                document.getElementById('factura-cuota-fija-campo').style.display = 'none';
 
                 // Sin cliente seleccionado: mostramos de nuevo el buscador por caserío y ocultamos el formulario del recibo
                 document.getElementById('factura-caserio-browser').style.display = 'block';
                 document.getElementById('btn-cambiar-cliente').style.display = 'none';
                 document.getElementById('factura-form-recibo').style.display = 'none';
+                document.getElementById('factura-historial-wrap').style.display = 'none';
+            }
+        }
+
+        // Muestra/oculta la lista de recibos ya emitidos del cliente cargado en Facturación
+        function toggleHistorialFactura() {
+            const div = document.getElementById('factura-historial-lista');
+            const flecha = document.getElementById('flecha-toggle-historial-factura');
+            const abierto = div.style.display !== 'none';
+            div.style.display = abierto ? 'none' : 'block';
+            if (flecha) flecha.style.transform = abierto ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+
+        // Pinta el historial de recibos del cliente cargado en Facturación (más reciente primero),
+        // con botones para reimprimir por Bluetooth (RawBT) o PDF, por si el recibo original
+        // tuvo algún problema al emitirse o imprimirse. Solo lectura: no permite borrar desde aquí.
+        // Usa carga progresiva (igual que el Historial general) para que un cliente con años
+        // de recibos no sature la pantalla ni ponga lento el teléfono.
+        function renderizarHistorialFactura(id) {
+            const wrap = document.getElementById('factura-historial-wrap');
+            const badge = document.getElementById('badge-historial-factura');
+            const lista = document.getElementById('factura-historial-lista');
+            if (!wrap || !lista) return;
+
+            historialFacturaFiltrado = recibos.filter(r => r.usuarioId == id).sort((a, b) => b.id - a.id);
+            historialFacturaMostrados = 0;
+            lista.innerHTML = '';
+
+            if (historialFacturaFiltrado.length === 0) {
+                wrap.style.display = 'none';
+                return;
+            }
+
+            wrap.style.display = 'block';
+            badge.innerText = historialFacturaFiltrado.length;
+            // Colapsado por defecto para no saturar la pantalla al cargar el cliente.
+            lista.style.display = 'none';
+            document.getElementById('flecha-toggle-historial-factura').style.transform = 'rotate(0deg)';
+
+            // Pintamos solo el primer lote; el resto se carga con "Ver más antiguos" si el
+            // cliente lo pide, así el trabajo pesado nunca ocurre a menos que haga falta.
+            renderizarLoteHistorialFactura();
+        }
+
+        // Pinta la siguiente tanda de recibos del mini-historial de Facturación.
+        function renderizarLoteHistorialFactura() {
+            const lista = document.getElementById('factura-historial-lista');
+            if (!lista) return;
+
+            const btnAnterior = document.getElementById('btn-cargar-mas-historial-factura');
+            if (btnAnterior) btnAnterior.remove();
+
+            const siguienteLote = historialFacturaFiltrado.slice(historialFacturaMostrados, historialFacturaMostrados + HISTORIAL_FACTURA_LOTE);
+
+            const piezas = siguienteLote.map(r => {
+                const pag = r.estado === 'pagado';
+                return `
+                <div class="list-item" style="padding:12px 14px; margin-bottom:8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-weight:700; text-transform:capitalize;">${r.mesFacturado || r.fecha}</span>
+                        <span class="status-badge ${pag ? 'pagado' : 'pendiente'}">${pag ? 'PAGADO' : 'DEBE'}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:0.78rem; color:#777;">N° ${r.numero || '---'} · 📅 ${r.fecha}</div>
+                            <div style="font-size:1.1rem; font-weight:800;">$${totalRecibo(r).toFixed(2)}</div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn btn-bt" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto; color:white;" onclick="imprimirBluetooth(${r.id})">📱</button>
+                            <button type="button" class="btn-primary" style="margin:0; padding:8px 12px; font-size:0.8rem; width:auto;" onclick="imprimirPDF(${r.id})">📄</button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            lista.insertAdjacentHTML('beforeend', piezas.join(''));
+            historialFacturaMostrados += siguienteLote.length;
+
+            if (historialFacturaMostrados < historialFacturaFiltrado.length) {
+                const restantes = historialFacturaFiltrado.length - historialFacturaMostrados;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.id = 'btn-cargar-mas-historial-factura';
+                btn.className = 'btn-outline';
+                btn.style.cssText = 'width:100%; margin:5px 0 10px;';
+                btn.innerText = `⬇️ Ver más antiguos (${restantes} restantes)`;
+                btn.onclick = () => renderizarLoteHistorialFactura();
+                lista.appendChild(btn);
             }
         }
 
@@ -1880,6 +2071,7 @@
             document.getElementById('factura-caserio-browser').style.display = 'block';
             document.getElementById('btn-cambiar-cliente').style.display = 'none';
             document.getElementById('factura-form-recibo').style.display = 'none';
+            document.getElementById('factura-historial-wrap').style.display = 'none';
         }
 
         // ================= MÓDULO "COBRAR" (solo cobrar y generar recibo) =================
@@ -2158,11 +2350,11 @@
                 doc.setFont('helvetica', 'normal');
                 doc.text(`${periodo}  |  Caserío: ${caserio}`, 14, 22);
 
-                const filasPagados = recListaPagadosActual.map(r => [
-                    r.nombre || '', r.direccion || '', r.fechaPago || r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
+                const filasPagados = recListaPagadosActual.map((r, i) => [
+                    i + 1, r.nombre || '', r.direccion || '', r.fechaPago || r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
                 ]);
-                const filasDeben = recListaDebenActual.map(r => [
-                    r.nombre || '', r.direccion || '', r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
+                const filasDeben = recListaDebenActual.map((r, i) => [
+                    i + 1, r.nombre || '', r.direccion || '', r.fecha || '', `$${totalRecibo(r).toFixed(2)}`
                 ]);
 
                 let startY = 28;
@@ -2174,8 +2366,8 @@
                     doc.text(`Pagados (${recListaPagadosActual.length}) - Total: $${totalPagados.toFixed(2)}`, 14, startY);
                     doc.autoTable({
                         startY: startY + 3,
-                        head: [['Cliente', 'Caserío', 'Fecha de pago', 'Monto']],
-                        body: filasPagados.length ? filasPagados : [['—', '—', '—', '—']],
+                        head: [['N°', 'Cliente', 'Caserío', 'Fecha de pago', 'Monto']],
+                        body: filasPagados.length ? filasPagados : [['—', '—', '—', '—', '—']],
                         styles: { fontSize: 8, cellPadding: 2 },
                         headStyles: { fillColor: [46, 125, 50] },
                         margin: { left: 14, right: 14 }
@@ -2188,13 +2380,31 @@
                     doc.text(`Deben (${recListaDebenActual.length}) - Total: $${totalDeben.toFixed(2)}`, 14, startY);
                     doc.autoTable({
                         startY: startY + 3,
-                        head: [['Cliente', 'Caserío', 'Pendiente desde', 'Monto']],
-                        body: filasDeben.length ? filasDeben : [['—', '—', '—', '—']],
+                        head: [['N°', 'Cliente', 'Caserío', 'Pendiente desde', 'Monto']],
+                        body: filasDeben.length ? filasDeben : [['—', '—', '—', '—', '—']],
                         styles: { fontSize: 8, cellPadding: 2 },
                         headStyles: { fillColor: [198, 40, 40] },
                         margin: { left: 14, right: 14 }
                     });
+                    startY = doc.lastAutoTable.finalY + 10;
                 }
+
+                // Nota resumen al final: cuántos usuarios pagaron / cuántos deben, y sus totales.
+                // Si la hoja no tiene espacio suficiente, se agrega una página nueva.
+                if (startY > 250) { doc.addPage(); startY = 20; }
+                doc.setDrawColor(180, 180, 180);
+                doc.line(14, startY, 196, startY);
+                startY += 7;
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                doc.text('RESUMEN', 14, startY);
+                startY += 6;
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+                doc.setTextColor(46, 125, 50);
+                doc.text(`Usuarios que pagaron: ${recListaPagadosActual.length}   -   Total pagado: $${totalPagados.toFixed(2)}`, 14, startY);
+                startY += 6;
+                doc.setTextColor(198, 40, 40);
+                doc.text(`Usuarios que deben: ${recListaDebenActual.length}   -   Total pendiente: $${totalDeben.toFixed(2)}`, 14, startY);
+                doc.setTextColor(0, 0, 0);
 
                 const nombreTipo = { pagados: 'Pagados', deben: 'Deben', general: 'General' }[tipo];
                 const filename = `Recaudacion_${nombreTipo}_${Date.now()}.pdf`;
@@ -2688,16 +2898,24 @@
         // ================= FIN MÓDULO "COBRAR" =================
 
             function calcularTotales() {
-            const ant = parseFloat(document.getElementById('f-lectura-ant').value)||0;
-            const act = parseFloat(document.getElementById('f-lectura-act').value)||0;
-            const prec = parseFloat(document.getElementById('f-precio').value)||0;
+            const uidActual = document.getElementById('f-usuario-id').value;
+            const uActual = usuarios.find(x => x.id == uidActual);
+            const esCuotaFija = !!(uActual && uActual.cuotaFija);
+
             const mora = parseFloat(document.getElementById('f-mora').value)||0;
             const extra = parseFloat(document.getElementById('f-extra').value)||0;
 
-            let cons = (act - ant) < 0 ? 0 : (act - ant);
-            document.getElementById('f-consumo').value = cons;
-
-            const totalMes = cons * prec;
+            let totalMes;
+            if (esCuotaFija) {
+                totalMes = parseFloat(document.getElementById('f-cuota-fija-monto').value) || 0;
+            } else {
+                const ant = parseFloat(document.getElementById('f-lectura-ant').value)||0;
+                const act = parseFloat(document.getElementById('f-lectura-act').value)||0;
+                const prec = parseFloat(document.getElementById('f-precio').value)||0;
+                let cons = (act - ant) < 0 ? 0 : (act - ant);
+                document.getElementById('f-consumo').value = cons;
+                totalMes = cons * prec;
+            }
 
             // Mostramos el total combinado para que sepas cuánto cobrar en efectivo
             document.getElementById('f-total-pagar').innerText = '$' + (totalMes + mora + extra).toFixed(2);
@@ -2710,17 +2928,29 @@
             const u = usuarios.find(x => x.id == uid);
 
             if(!uid) return alert("Faltan datos: Por favor, seleccione un cliente de la lista de resultados.");
-            if(!document.getElementById('f-lectura-act').value) return alert("Faltan datos: Ingrese la Lectura Actual.");
+
+            const esCuotaFija = !!(u && u.cuotaFija);
+
+            if (esCuotaFija) {
+                if (!(parseFloat(document.getElementById('f-cuota-fija-monto').value) > 0)) return alert("Faltan datos: Ingrese el monto de la cuota fija.");
+            } else {
+                if(!document.getElementById('f-lectura-act').value) return alert("Faltan datos: Ingrese la Lectura Actual.");
+            }
 
             const hoy = new Date();
 
-            const consumo = parseFloat(document.getElementById('f-consumo').value) || 0;
-            const precio = parseFloat(document.getElementById('f-precio').value) || 0;
+            // Cliente con cuota fija (contador dañado): se factura el monto fijo, sin lectura ni consumo.
+            const consumo = esCuotaFija ? 0 : (parseFloat(document.getElementById('f-consumo').value) || 0);
+            const precio = esCuotaFija ? 0 : (parseFloat(document.getElementById('f-precio').value) || 0);
             const moraVisual = parseFloat(document.getElementById('f-mora').value) || 0;
             const extraVisual = parseFloat(document.getElementById('f-extra').value) || 0;
             const cargosExtraDelRecibo = (u && Array.isArray(u.cargosExtra)) ? u.cargosExtra : [];
             const extraDetalle = cargosExtraDelRecibo.map(c => c.concepto + ' ($' + Number(c.monto).toFixed(2) + ')').join(', ');
-            const consumoMes = (consumo * precio).toFixed(2);
+            const consumoMes = esCuotaFija
+                ? (parseFloat(document.getElementById('f-cuota-fija-monto').value) || 0).toFixed(2)
+                : (consumo * precio).toFixed(2);
+            const lecturaAntGuardada = esCuotaFija ? '---' : document.getElementById('f-lectura-ant').value;
+            const lecturaActualGuardada = esCuotaFija ? '---' : document.getElementById('f-lectura-act').value;
 
             // Detalle de a qué meses corresponde el Saldo Pendiente (para mostrarlo en el recibo impreso)
             const pendientesDelCliente = recibos.filter(rec => rec.usuarioId == uid && rec.estado === 'pendiente' && rec.id !== reciboEditandoId);
@@ -2758,8 +2988,8 @@
                 mesFacturado: hoy.toLocaleDateString('es-ES',{month:'long',year:'numeric'}),
                 periodoDesde: periodoDesde,
                 periodoHasta: hoy.toLocaleDateString('es-ES'),
-                lecturaAnt: document.getElementById('f-lectura-ant').value,
-                lecturaActual: document.getElementById('f-lectura-act').value,
+                lecturaAnt: lecturaAntGuardada,
+                lecturaActual: lecturaActualGuardada,
                 consumo: consumo.toFixed(2),
                 precioUnidad: precio.toFixed(2),
                 mora: moraVisual.toFixed(2),
@@ -2767,6 +2997,7 @@
                 extra: extraVisual.toFixed(2),
                 extraDetalle: extraDetalle,
                 total: consumoMes,
+                esCuotaFija: esCuotaFija,
                 estado: 'pendiente'
             };
 
@@ -2815,18 +3046,40 @@
 
         // HISTORIAL Y ACCIONES
         // ===== HISTORIAL: carga por lotes (evita cargar todo de golpe cuando hay muchos usuarios) =====
+        // Paginación del mini-historial dentro de Facturación (evita renderizar de golpe
+        // años de recibos de un mismo cliente, que en un celular podría verse lento/pesado).
+        let historialFacturaFiltrado = [];
+        let historialFacturaMostrados = 0;
+        const HISTORIAL_FACTURA_LOTE = 6; // ~medio año de recibos mensuales por tanda
+
         let historialFiltrados = [];
         let historialMostrados = 0;
         const HISTORIAL_LOTE = 25; // cuántos recibos se muestran por tanda
 
-        // Aplica los filtros de año/mes/estado sobre los recibos (sin tocar el DOM)
+        // Quita acentos y pasa a minúsculas, para que "jose" encuentre "José" sin importar mayúsculas/acentos
+        function normalizarTexto(s) {
+            return (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        }
+
+        // Espera a que la persona deje de escribir (180ms) antes de filtrar, para no
+        // recalcular/redibujar en cada tecla y que la búsqueda se sienta rápida y fluida.
+        let historialBusquedaTimeout = null;
+        function onBuscarHistorialInput() {
+            clearTimeout(historialBusquedaTimeout);
+            historialBusquedaTimeout = setTimeout(renderizarRecibos, 180);
+        }
+
+        // Aplica los filtros de año/mes/estado/nombre sobre los recibos (sin tocar el DOM)
         function computarFiltroHistorial() {
             const fA = document.getElementById('filtro-anio').value; const fM = document.getElementById('filtro-mes').value; const fE = document.getElementById('filtro-estado').value;
+            const fBusquedaEl = document.getElementById('filtro-busqueda');
+            const fBusqueda = fBusquedaEl ? normalizarTexto(fBusquedaEl.value.trim()) : '';
             const base = [...recibos].reverse().filter(r => {
                 const f = obtenerMesAnio(r.fecha);
                 if(fA !== 'todos' && f.anio != fA) return false;
                 if(fM !== 'todos' && f.mes != fM) return false;
                 if(fE !== 'todos' && r.estado !== fE) return false;
+                if(fBusqueda && !normalizarTexto(r.nombre).includes(fBusqueda)) return false;
                 return true;
             });
 
@@ -2849,9 +3102,31 @@
             return resultado;
         }
 
+        // Cuenta y suma pagados/deben sobre el listado YA filtrado (respeta año/mes/estado/búsqueda).
+        // Los pendientes ya vienen agrupados por cliente en historialFiltrados, así que cada
+        // fila cuenta como un solo deudor (no un recibo por mes adeudado).
+        function actualizarResumenHistorial(lista) {
+            let countPagados = 0, totalPagados = 0, countDeben = 0, totalDeben = 0;
+            lista.forEach(r => {
+                if (r.estado === 'pagado') {
+                    countPagados++;
+                    totalPagados += totalRecibo(r);
+                } else {
+                    countDeben++;
+                    const grupo = r._recibosAgrupados || [r];
+                    totalDeben += grupo.reduce((s, g) => s + totalRecibo(g), 0);
+                }
+            });
+            document.getElementById('resumen-count-pagados').innerText = countPagados;
+            document.getElementById('resumen-total-pagados').innerText = '$' + totalPagados.toFixed(2);
+            document.getElementById('resumen-count-deben').innerText = countDeben;
+            document.getElementById('resumen-total-deben').innerText = '$' + totalDeben.toFixed(2);
+        }
+
         // Reinicia la vista desde cero: se usa al cambiar filtros o al entrar a la pestaña Historial
         function renderizarRecibos() {
             historialFiltrados = computarFiltroHistorial();
+            actualizarResumenHistorial(historialFiltrados);
             historialMostrados = 0;
             document.getElementById('lista-recibos').innerHTML = '';
             renderizarLoteHistorial();
@@ -2865,6 +3140,7 @@
 
             const previamenteMostrados = historialMostrados || HISTORIAL_LOTE;
             historialFiltrados = computarFiltroHistorial();
+            actualizarResumenHistorial(historialFiltrados);
             historialMostrados = 0;
             document.getElementById('lista-recibos').innerHTML = '';
             renderizarLoteHistorial(Math.min(previamenteMostrados, historialFiltrados.length) || HISTORIAL_LOTE);
@@ -2896,7 +3172,11 @@
                     const detalleMeses = grupo.map(g => `
                         <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; padding:6px 0; border-top:1px dashed #ddd;">
                             <span style="text-transform:capitalize;">${g.mesFacturado} (N° ${g.numero}) — $${totalRecibo(g).toFixed(2)}${parseFloat(g.extra) > 0 ? ' <span style="color:#e65100;">(incl. 🚧 $' + parseFloat(g.extra).toFixed(2) + ')</span>' : ''}</span>
-                            <button class="btn-danger" style="margin:0; padding:5px 8px; font-size:0.7rem; width:auto;" onclick="eliminarRecibo(${g.id})">🗑️</button>
+                            <div style="display:flex; gap:6px; flex-shrink:0;">
+                                <button class="btn btn-bt" style="margin:0; padding:5px 8px; font-size:0.7rem; width:auto; color:white;" onclick="imprimirBluetooth(${g.id})">📱</button>
+                                <button class="btn-primary" style="margin:0; padding:5px 8px; font-size:0.7rem; width:auto;" onclick="imprimirPDF(${g.id})">📄</button>
+                                <button class="btn-danger" style="margin:0; padding:5px 8px; font-size:0.7rem; width:auto;" onclick="eliminarRecibo(${g.id})">🗑️</button>
+                            </div>
                         </div>`).join('');
 
                     return `
@@ -2918,7 +3198,7 @@
                         <strong style="font-size:1rem;">${r.nombre}</strong> <span class="status-badge ${pag?'pagado':'pendiente'}">${pag?'PAGADO':'DEBE'}</span>
                     </div>
                     <div style="display:flex; justify-content:space-between; color:#666; font-size:0.85rem; margin-bottom:10px;">
-                        <span>📅 ${r.fecha}</span> <span>💧 ${r.consumo}m³</span>
+                        <span>📅 ${r.fecha}</span> <span>${r.esCuotaFija ? '⚠️ Cuota Fija' : '💧 ' + r.consumo + 'm³'}</span>
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
@@ -3261,12 +3541,18 @@
             t += `Contador:  ${r.contador}\n`;
             t += "--------------------------------\n";
 
-            // Lecturas
+            // Lecturas (o Cuota Fija, si el contador de este cliente está dañado)
             t += `Periodo:  ${r.periodoDesde || '---'} al ${r.periodoHasta || r.fecha}\n`;
-            t += `Lect. Actual:   ${r.lecturaActual}\n`;
-            t += `Lect. Anterior: ${r.lecturaAnt}\n`;
-            t += `Consumo:        ${r.consumo} m3\n`;
-            t += `Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}\n`;
+            if (r.esCuotaFija) {
+                t += NEGRITA_ON;
+                t += `CUOTA FIJA (contador danado)\n`;
+                t += NEGRITA_OFF;
+            } else {
+                t += `Lect. Actual:   ${r.lecturaActual}\n`;
+                t += `Lect. Anterior: ${r.lecturaAnt}\n`;
+                t += `Consumo:        ${r.consumo} m3\n`;
+                t += `Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}\n`;
+            }
             t += "--------------------------------\n";
 
             // Totales
@@ -3349,6 +3635,14 @@
             document.getElementById('t-lectura-ant').innerText = r.lecturaAnt;
             document.getElementById('t-consumo').innerText = r.consumo + ' m³';
             document.getElementById('t-precio').innerText = '$' + parseFloat(r.precioUnidad).toFixed(2);
+            const filasLectura = ['t-fila-lect-act', 't-fila-lect-ant', 't-fila-consumo', 't-fila-precio'];
+            if (r.esCuotaFija) {
+                filasLectura.forEach(id => document.getElementById(id).style.display = 'none');
+                document.getElementById('t-fila-cuota-fija').style.display = 'block';
+            } else {
+                filasLectura.forEach(id => document.getElementById(id).style.display = 'flex');
+                document.getElementById('t-fila-cuota-fija').style.display = 'none';
+            }
             document.getElementById('t-subtotal').innerText = '$' + montoMes.toFixed(2);
             document.getElementById('t-mora').innerText = '$' + deudaPendiente.toFixed(2);
             document.getElementById('t-total').innerText = '$' + granTotal.toFixed(2);
@@ -3446,10 +3740,14 @@
                 linea(`Contador: ${r.contador}`, { size: 8.5, center: false, gap: 5 });
                 separador();
                 linea(`Periodo: ${(r.periodoDesde || '---')} al ${(r.periodoHasta || r.fecha)}`, { size: 8, center: false, gap: 4.5 });
-                linea(`Lect. Actual:   ${r.lecturaActual}`, { size: 8, center: false, gap: 4.5 });
-                linea(`Lect. Anterior: ${r.lecturaAnt}`, { size: 8, center: false, gap: 4.5 });
-                linea(`Consumo:        ${r.consumo} m3`, { size: 8, center: false, gap: 4.5 });
-                linea(`Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}`, { size: 8, center: false, gap: 5 });
+                if (r.esCuotaFija) {
+                    linea('CUOTA FIJA (contador danado)', { size: 8.5, bold: true, center: false, gap: 5 });
+                } else {
+                    linea(`Lect. Actual:   ${r.lecturaActual}`, { size: 8, center: false, gap: 4.5 });
+                    linea(`Lect. Anterior: ${r.lecturaAnt}`, { size: 8, center: false, gap: 4.5 });
+                    linea(`Consumo:        ${r.consumo} m3`, { size: 8, center: false, gap: 4.5 });
+                    linea(`Precio m3:      $${parseFloat(r.precioUnidad).toFixed(2)}`, { size: 8, center: false, gap: 5 });
+                }
                 separador();
                 linea(`Subtotal:                $${montoMes.toFixed(2)}`, { size: 8.5, center: false, gap: 4.5 });
                 linea(`${pagado ? 'Saldo Incluido:' : 'Saldo Ant/Mora:'}          $${deudaPendiente.toFixed(2)}`, { size: 8.5, center: false, gap: extra > 0 || (deudaPendiente > 0 && r.moraDetalle) ? 4.5 : 5 });
@@ -3529,10 +3827,33 @@
             actualizarResumenContable();
         }
 
+        // Convierte "dd/mm/yyyy" a "yyyy-mm-dd" para poder compararla con los <input type="date">
+        function fechaAIso(fechaStr) {
+            const p = fechaStr.split('/');
+            if (p.length !== 3) return '';
+            return p[2] + '-' + p[1].padStart(2, '0') + '-' + p[0].padStart(2, '0');
+        }
+
+        // Quita el rango de fechas y vuelve a filtrar por Año/Mes/Día
+        function quitarRangoContable() {
+            document.getElementById('cont-fecha-desde').value = '';
+            document.getElementById('cont-fecha-hasta').value = '';
+            actualizarResumenContable();
+        }
+
         function actualizarResumenContable() {
             const cA = document.getElementById('cont-anio').value;
             const cM = document.getElementById('cont-mes').value;
             const cD = document.getElementById('cont-dia').value;
+            const fDesde = document.getElementById('cont-fecha-desde').value; // yyyy-mm-dd o ''
+            const fHasta = document.getElementById('cont-fecha-hasta').value;
+            const rangoActivo = !!(fDesde && fHasta);
+
+            // Si hay un rango activo, se deshabilitan visualmente los selects de Año/Mes/Día
+            // para que quede claro cuál filtro está mandando (evita confusión).
+            ['cont-anio', 'cont-mes', 'cont-dia'].forEach(id => {
+                document.getElementById(id).disabled = rangoActivo;
+            });
 
             let totalAgua = 0;
             let totalCalle = 0;
@@ -3546,19 +3867,22 @@
 
             // Filtramos y procesamos
             [...contabilidad].reverse().forEach(c => {
-                const f = obtenerMesAnio(c.fecha);
+                if (rangoActivo) {
+                    // Filtro por rango de fechas específico (inclusive en ambos extremos)
+                    const iso = fechaAIso(c.fecha);
+                    if (!iso || iso < fDesde || iso > fHasta) return;
+                } else {
+                    const f = obtenerMesAnio(c.fecha);
+                    // Obtenemos el día de la fecha (dd/mm/yyyy) -> split('/')[0]
+                    const diaTransaccion = parseInt(c.fecha.split('/')[0]);
 
-                // Obtenemos el día de la fecha (dd/mm/yyyy) -> split('/')[0]
-                const diaTransaccion = parseInt(c.fecha.split('/')[0]);
-
-                // 1. Filtro de Año
-                if (f.anio != cA) return;
-
-                // 2. Filtro de Mes (si no es 'todos')
-                if (cM !== 'todos' && f.mes != cM) return;
-
-                // 3. Filtro de Día (si no es 'todos')
-                if (cD !== 'todos' && diaTransaccion != cD) return;
+                    // 1. Filtro de Año
+                    if (f.anio != cA) return;
+                    // 2. Filtro de Mes (si no es 'todos')
+                    if (cM !== 'todos' && f.mes != cM) return;
+                    // 3. Filtro de Día (si no es 'todos')
+                    if (cD !== 'todos' && diaTransaccion != cD) return;
+                }
 
                 // Separamos Agua vs Calle de cada movimiento (cruzando con el recibo original),
                 // pero aquí SÍ sumamos ambos para dar el Total Global. El desglose se muestra
@@ -3586,10 +3910,15 @@
             document.getElementById('cont-total-ambos').innerText = '$' + totalGlobal.toFixed(2);
 
             // Actualizar Texto descriptivo
-            let mName = cM === 'todos' ? "Todo el Año" : document.querySelector(`#cont-mes option[value="${cM}"]`).innerText;
-            let dName = cD === 'todos' ? "" : `(Día ${cD})`;
-
-            cetiquetaPeriodoContable = `${mName} ${cA} ${dName}`.trim();
+            if (rangoActivo) {
+                const [ayD, mmD, ddD] = fDesde.split('-');
+                const [ayH, mmH, ddH] = fHasta.split('-');
+                cetiquetaPeriodoContable = `${ddD}/${mmD}/${ayD} al ${ddH}/${mmH}/${ayH}`;
+            } else {
+                let mName = cM === 'todos' ? "Todo el Año" : document.querySelector(`#cont-mes option[value="${cM}"]`).innerText;
+                let dName = cD === 'todos' ? "" : `(Día ${cD})`;
+                cetiquetaPeriodoContable = `${mName} ${cA} ${dName}`.trim();
+            }
             document.getElementById('cont-texto-periodo').innerText = `Reporte: ${cetiquetaPeriodoContable}`;
 
             // Si el panel de detalle ya estaba abierto, lo refrescamos con los nuevos filtros
@@ -3622,19 +3951,20 @@
             const tbody = document.getElementById('cont-detalle-tabla');
             let total = 0;
             if (lista.length) {
-                tbody.innerHTML = lista.map(item => {
+                tbody.innerHTML = lista.map((item, i) => {
                     total += item.monto;
                     const nota = (tipo === 'ambos' && item.montoCalle > 0)
                         ? `<br><small style="font-weight:normal;color:#e65100;">(Agua $${item.montoAgua.toFixed(2)} + Calle $${item.montoCalle.toFixed(2)})</small>`
                         : '';
                     return `<tr>
+                        <td data-label="N°">${i + 1}</td>
                         <td data-label="Fecha">${item.fecha}</td>
                         <td data-label="Cliente">${item.cliente}</td>
                         <td data-label="Monto" style="font-weight:bold; color:${color};">$${item.monto.toFixed(2)}${nota}</td>
                     </tr>`;
                 }).join('');
             } else {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">Sin movimientos en este periodo</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#999;">Sin movimientos en este periodo</td></tr>`;
             }
             const totalEl = document.getElementById('cont-detalle-total');
             totalEl.innerText = '$' + total.toFixed(2);
@@ -3667,22 +3997,46 @@
                 doc.text(`Detalle: ${nombreTipo}  |  Periodo: ${cetiquetaPeriodoContable}`, 14, 22);
 
                 const total = lista.reduce((a, item) => a + item.monto, 0);
-                const filas = lista.map(item => {
+                const filas = lista.map((item, i) => {
                     const notaCalle = (tipo === 'ambos' && item.montoCalle > 0) ? ` (Agua $${item.montoAgua.toFixed(2)} + Calle $${item.montoCalle.toFixed(2)})` : '';
-                    return [item.fecha, item.cliente, `$${item.monto.toFixed(2)}${notaCalle}`];
+                    return [i + 1, item.fecha, item.cliente, `$${item.monto.toFixed(2)}${notaCalle}`];
                 });
 
                 doc.autoTable({
                     startY: 28,
-                    head: [['Fecha', 'Cliente', 'Monto']],
-                    body: filas.length ? filas : [['—', '—', '—']],
-                    foot: [['', 'TOTAL', `$${total.toFixed(2)}`]],
+                    head: [['N°', 'Fecha', 'Cliente', 'Monto']],
+                    body: filas.length ? filas : [['—', '—', '—', '—']],
+                    foot: [['', '', 'TOTAL', `$${total.toFixed(2)}`]],
                     showFoot: 'lastPage',
                     styles: { fontSize: 8, cellPadding: 2 },
                     headStyles: { fillColor: colorRGB },
                     footStyles: { fillColor: [240, 240, 240], textColor: 20, fontStyle: 'bold' },
                     margin: { left: 14, right: 14 }
                 });
+
+                // Nota resumen al final: cantidad de movimientos y desglose Agua/Calle cuando aplica.
+                let startY = doc.lastAutoTable.finalY + 10;
+                if (startY > 250) { doc.addPage(); startY = 20; }
+                doc.setDrawColor(180, 180, 180);
+                doc.line(14, startY, 196, startY);
+                startY += 7;
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+                doc.text('RESUMEN', 14, startY);
+                startY += 6;
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+                doc.setTextColor(0, 0, 0);
+                doc.text(`Total de movimientos: ${lista.length}   —   Total recaudado: $${total.toFixed(2)}`, 14, startY);
+                if (tipo === 'ambos') {
+                    const totalAguaSum = lista.reduce((a, item) => a + (item.montoAgua || 0), 0);
+                    const totalCalleSum = lista.reduce((a, item) => a + (item.montoCalle || 0), 0);
+                    startY += 6;
+                    doc.setTextColor(21, 101, 192);
+                    doc.text(`Solo Agua: $${totalAguaSum.toFixed(2)}`, 14, startY);
+                    startY += 6;
+                    doc.setTextColor(230, 81, 0);
+                    doc.text(`Solo Calle: $${totalCalleSum.toFixed(2)}`, 14, startY);
+                    doc.setTextColor(0, 0, 0);
+                }
 
                 const filename = `Ingresos_${nombreTipo.replace(/\s+/g, '')}_${Date.now()}.pdf`;
                 if (typeof Android !== 'undefined' && Android.guardarArchivo) {
@@ -3776,20 +4130,24 @@
 
             // Desglose por caserío (siempre se muestran los 4, para comparar de un vistazo)
             const tbodyCaserios = document.getElementById('fc-tabla-caserios');
+            let filaNum = 0;
             let filasCaserios = CASERIOS.map(cas => `
                 <tr>
+                    <td data-label="N°">${++filaNum}</td>
                     <td data-label="Caserío">${cas}</td>
                     <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${(totalesCaserio[cas] || 0).toFixed(2)}</td>
                 </tr>`).join('');
             if (totalesCaserio['Sin caserío'] > 0) {
                 filasCaserios += `
                 <tr>
+                    <td data-label="N°">${++filaNum}</td>
                     <td data-label="Caserío">Sin caserío</td>
                     <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${totalesCaserio['Sin caserío'].toFixed(2)}</td>
                 </tr>`;
             }
             filasCaserios += `
                 <tr style="background:#fff3e0;">
+                    <td data-label="N°"></td>
                     <td data-label="Caserío"><strong>GLOBAL</strong></td>
                     <td data-label="Monto" style="font-weight:800; color:#e65100;">$${totalGlobal.toFixed(2)}</td>
                 </tr>`;
@@ -3798,13 +4156,14 @@
             // Detalle de movimientos (aquí sí respeta el filtro de caserío elegido)
             const tbodyDetalle = document.getElementById('fc-tabla-detalle');
             const detalleFiltrado = movimientosDelPeriodo.filter(m => caserioFiltro === 'todos' || m.caserio === caserioFiltro);
-            tbodyDetalle.innerHTML = [...detalleFiltrado].reverse().map(m => `
+            tbodyDetalle.innerHTML = [...detalleFiltrado].reverse().map((m, i) => `
                 <tr>
+                    <td data-label="N°">${i + 1}</td>
                     <td data-label="Fecha">${m.fecha}</td>
                     <td data-label="Cliente">${m.cliente}${m.detalle ? '<br><small style="color:#888;">' + m.detalle + '</small>' : ''}</td>
                     <td data-label="Caserío">${m.caserio}</td>
                     <td data-label="Monto" style="font-weight:bold; color:#e65100;">$${m.montoCalle.toFixed(2)}</td>
-                </tr>`).join('') || '<tr><td colspan="4" style="text-align:center; color:#999;">Sin movimientos en este periodo/caserío.</td></tr>';
+                </tr>`).join('') || '<tr><td colspan="5" style="text-align:center; color:#999;">Sin movimientos en este periodo/caserío.</td></tr>';
         }
 
         // --- FUNCIÓN AGREGADA: EXPORTAR CLIENTES SIMPLIFICADA (FINAL) ---
@@ -4149,6 +4508,38 @@
         }, 6000);
 
         // ---------- LOGIN ----------
+        // Mensajes de error específicos por código de Firebase, en vez de mostrar siempre
+        // "contraseña incorrecta" (que es engañoso cuando el problema real es de conexión).
+        function mensajeErrorLogin(err) {
+            const codigo = err && err.code;
+            if (codigo === 'auth/network-request-failed') {
+                return '📴 No hay conexión a internet. Verifica tu señal/WiFi e intenta de nuevo.';
+            }
+            if (codigo === 'auth/too-many-requests') {
+                return '⏳ Demasiados intentos. Espera un momento antes de volver a intentar.';
+            }
+            if (codigo === 'auth/invalid-credential' || codigo === 'auth/wrong-password' || codigo === 'auth/user-not-found') {
+                return '❌ Correo o contraseña incorrectos.';
+            }
+            if (codigo === 'auth/invalid-email') {
+                return '❌ El correo no tiene un formato válido.';
+            }
+            if (codigo === 'timeout') {
+                return '⏱️ No se pudo conectar (tardó demasiado). Verifica tu señal e intenta de nuevo.';
+            }
+            return '❌ No se pudo iniciar sesión (' + (codigo || 'error desconocido') + '). Intenta de nuevo.';
+        }
+
+        // Da un tiempo límite a la petición de login: si Firebase no responde (señal falsa,
+        // "rayitas" sin datos reales), rechaza con un error de tipo "timeout" en vez de
+        // dejar el botón colgado en "Entrando..." para siempre sin avisar nada.
+        function conTimeout(promesa, ms) {
+            return Promise.race([
+                promesa,
+                new Promise((_, reject) => setTimeout(() => reject({ code: 'timeout' }), ms))
+            ]);
+        }
+
         window.iniciarSesion = function () {
             const email = document.getElementById('login-email').value.trim();
             const pass = document.getElementById('login-pass').value;
@@ -4157,8 +4548,8 @@
             errBox.style.display = 'none';
             if (!email || !pass) { errBox.innerText = 'Ingresa correo y contraseña.'; errBox.style.display = 'block'; return; }
             btn.disabled = true; btn.innerText = 'Entrando...';
-            signInWithEmailAndPassword(auth, email, pass)
-                .catch(() => { errBox.innerText = '❌ Correo o contraseña incorrectos.'; errBox.style.display = 'block'; })
+            conTimeout(signInWithEmailAndPassword(auth, email, pass), 15000)
+                .catch((err) => { errBox.innerText = mensajeErrorLogin(err); errBox.style.display = 'block'; })
                 .finally(() => { btn.disabled = false; btn.innerText = '🔑 Entrar'; });
         };
 
