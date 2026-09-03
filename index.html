@@ -215,7 +215,8 @@
 
         .ticket-header { text-align: center; border-bottom: 1px dashed black; padding-bottom: 10px; margin-bottom: 10px; }
         .ticket-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .ticket-total { border-top: 1px dashed black; padding-top: 10px; margin-top: 10px; font-weight: bold; font-size: 16px; text-align: right; }
+        .ticket-total { border-top: 1px dashed black; padding-top: 10px; margin-top: 10px; font-weight: bold; font-size: 24px; text-align: right; }
+        .ticket-fecha-limite { border-top: 1px dashed black; padding-top: 6px; margin-top: 6px; font-size: 10px; font-weight: bold; text-align: center; }
         /* Punto indicador de estado de sincronización (cambia de color según el estado) */
         .sync-dot {
             display:inline-block; width:9px; height:9px; border-radius:50%;
@@ -256,14 +257,29 @@
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:2.8rem;">💧</div>
             <h2 style="margin:5px 0 0; color:var(--primary-dark);">ACOMAACAP</h2>
-            <p style="margin:5px 0 0; color:#666; font-size:0.85rem;">Inicia sesión para continuar</p>
+            <p style="margin:5px 0 0; color:#666; font-size:0.85rem;">Ingresa el PIN para continuar</p>
         </div>
-        <label>Correo</label>
-        <input type="email" id="login-email" placeholder="usuario@acomaacap.local" autocomplete="username">
-        <label>Contraseña</label>
-        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+        <label>PIN</label>
+        <input type="password" id="login-pin" inputmode="numeric" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter') desbloquearApp();">
         <div id="login-error" style="color:var(--danger); font-size:0.85rem; margin:-10px 0 15px; display:none;"></div>
-        <button class="btn btn-primary" id="btn-login" onclick="iniciarSesion()">🔑 Entrar</button>
+        <button class="btn btn-primary" id="btn-login" onclick="desbloquearApp()">🔓 Entrar</button>
+    </div>
+</div>
+
+<!-- ===== PANTALLA: BLOQUEO REMOTO DE SEGURIDAD ===== -->
+<!-- Se activa/desactiva por el administrador desde CUALQUIER dispositivo (o desde Firebase
+     Console directamente). Cubre TODO, incluso la pantalla del PIN: nadie entra mientras esté
+     activo, sin importar que sepa el PIN. Se revisa: (1) al abrir la app (con el último valor
+     que se alcanzó a sincronizar, aunque esté sin señal), y (2) en tiempo real mientras la app
+     ya está abierta, para poder sacar a alguien a mitad de uso. -->
+<div id="pantalla-bloqueo-remoto" style="display:none; position:fixed; inset:0; z-index:9999; background:linear-gradient(180deg,#7f1d1d,#450a0a); align-items:center; justify-content:center; padding:20px;">
+    <div style="background:white; border-radius:16px; padding:30px 25px; width:100%; max-width:380px; text-align:center; box-shadow:0 8px 30px rgba(0,0,0,0.4);">
+        <div style="font-size:3rem;">🚫</div>
+        <h2 style="margin:10px 0 4px; color:#b91c1c;">Aplicación bloqueada</h2>
+        <p style="color:#444; font-size:0.9rem; margin:0 0 6px;">Un administrador bloqueó el acceso a esta app por seguridad.</p>
+        <p id="bloqueo-remoto-motivo" style="color:#666; font-size:0.85rem; font-style:italic; margin:10px 0 0;"></p>
+        <p style="color:#999; font-size:0.75rem; margin-top:16px;">Contacta al administrador para más información.</p>
+        <button class="btn btn-outline" style="margin-top:16px; font-size:0.8rem;" onclick="intentarDesbloqueoRemotoDesdePantalla()">🔑 Soy Administrador, quitar bloqueo</button>
     </div>
 </div>
 
@@ -339,7 +355,18 @@
             </div>
         </div>
 
-        <button type="button" class="btn btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:14px;">Cerrar</button>
+        <button type="button" class="btn btn-outline" style="margin-top:10px;" onclick="mostrarDiagnosticoCuadre()">🔍 ¿Por qué no cuadra con Ingresos?</button>
+        <button type="button" class="btn btn-bt" onclick="cerrarModalRecaudacion()" style="margin-top:10px;">Cerrar</button>
+    </div>
+</div>
+
+<!-- ===== MODAL: DIAGNÓSTICO DE CUADRE (Recaudación de Cobros vs Ingresos) ===== -->
+<div id="modal-diagnostico" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:600; align-items:center; justify-content:center; padding:15px;">
+    <div style="background:white; border-radius:16px; max-width:640px; width:100%; padding:22px; box-shadow:0 10px 30px rgba(0,0,0,0.3); max-height:94vh; overflow-y:auto;">
+        <h3 style="margin:0 0 4px; text-align:center; font-size:1.2rem;">🔍 Verificar Cuadre</h3>
+        <p style="text-align:center; color:#888; font-size:0.82rem; margin:0 0 16px;">Compara "Recaudación de Cobros" (recibos) contra "Ingresos" (contabilidad)</p>
+        <div id="diag-contenido"></div>
+        <button type="button" class="btn btn-outline" style="margin-top:6px;" onclick="document.getElementById('modal-diagnostico').style.display='none';">Cerrar</button>
     </div>
 </div>
 
@@ -956,11 +983,13 @@
             </div>
         </div>
 
-        <div onclick="mostrarDetalleTipoIngreso('ambos')" style="background:#e8f5e9; border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer; margin-bottom:20px;">
+        <div onclick="mostrarDetalleTipoIngreso('ambos')" style="background:#e8f5e9; border-radius:10px; padding:12px 8px; text-align:center; cursor:pointer; margin-bottom:12px;">
             <div style="font-size:0.75rem; font-weight:700; color:#2e7d32;">💧🚧 AGUA + CALLE (TODOS)</div>
             <div style="font-size:1.3rem; font-weight:800; color:#2e7d32;" id="cont-total-ambos">$0.00</div>
             <div style="font-size:0.65rem; color:#2e7d32; margin-top:3px;">Toque para ver detalle</div>
         </div>
+
+        <button type="button" class="btn btn-outline" style="width:100%; margin-bottom:20px;" onclick="mostrarDiagnosticoCuadre()">🔍 Verificar por qué no cuadra con Recaudación</button>
 
         <div id="cont-detalle-panel" style="display:none; margin-bottom:20px; border-radius:10px; overflow:hidden; border:1px solid #eee;">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f5f5f5; gap:10px;">
@@ -1087,6 +1116,19 @@
             <button class="btn btn-primary" onclick="cambiarPasswordCobrar()">🔑 Cambiar Contraseña de Cobrar</button>
         </div>
 
+        <h4 style="margin:25px 0 10px 0; font-weight:700;">📅 Última Fecha de Pago</h4>
+
+        <div class="card card-blue">
+            <h4 style="margin:0 0 10px 0;">Día límite de pago (se muestra en los recibos)</h4>
+            <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                Este día se imprime en todos los recibos (Bluetooth y PDF) como la última fecha de pago de cada mes. Se guarda en este celular y también se sincroniza en la nube para que todos los dispositivos usen el mismo valor.
+            </p>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="number" id="input-fecha-limite-pago" min="1" max="31" style="width:80px; padding:8px; border:1px solid #ccc; border-radius:6px; font-size:1rem; text-align:center;">
+                <button class="btn btn-primary" style="margin:0;" onclick="actualizarFechaLimitePagoDesdeAjustes()">💾 Guardar</button>
+            </div>
+        </div>
+
         <h4 style="margin:25px 0 10px 0; font-weight:700;">🔢 Numeración de Recibos</h4>
 
         <div class="card card-blue">
@@ -1114,7 +1156,14 @@
                 </p>
                 <p id="sync-usuario-actual" style="margin:10px 0 0; font-size:0.8rem; color:#666;"></p>
                 <div id="lista-conectados">👥 Buscando usuarios conectados...</div>
-                <button class="btn btn-outline" style="margin-top:12px;" onclick="cerrarSesion()">🔒 Cerrar sesión</button>
+                <button class="btn btn-outline" style="margin-top:12px;" onclick="cambiarPinApp()">🔑 Cambiar PIN de acceso</button>
+                <button class="btn btn-outline" style="margin-top:8px;" onclick="bloquearApp()">🔒 Bloquear app (solo este celular)</button>
+            </div>
+            <div class="card" style="text-align:center; margin-top:15px; border:2px solid #b91c1c;">
+                <h4 style="margin:0 0 8px 0; color:#b91c1c;">🚨 Bloqueo remoto de seguridad</h4>
+                <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">Bloquea la app en TODOS los dispositivos a la vez, ante manipulaciones sospechosas. Requiere señal para enviarse. Pide contraseña de Administrador.</p>
+                <button class="btn btn-danger" onclick="activarBloqueoRemoto()">🚫 Bloquear TODOS los dispositivos</button>
+                <button class="btn btn-outline" style="margin-top:8px;" onclick="desactivarBloqueoRemoto()">✅ Quitar bloqueo remoto</button>
             </div>
             <div class="card card-green" style="text-align:center; margin-top:15px;">
                 <h4 style="margin:0 0 8px 0;">📦 Enviar Cobros Antiguos a Caja</h4>
@@ -1157,6 +1206,7 @@
         <div class="ticket-row" id="t-fila-cant-facturas" style="display:none;"><span>Facturas vencidas:</span><span id="t-cant-facturas">0</span></div>
         <div id="t-fila-mora-detalle" style="display:none; font-size:9px; color:#333; margin:-3px 0 3px;">Corresponde a: <span id="t-mora-detalle"></span></div>
         <div class="ticket-total"><span id="t-label-total">TOTAL</span>: <span id="t-total">$0.00</span></div>
+        <div class="ticket-fecha-limite" id="t-fecha-limite-pago"></div>
 
         <div id="t-aviso-mora" style="text-align:center; font-weight:bold; color:black; font-size:10px; padding:5px; margin-top:10px; border: 1px dashed black;"></div>
 
@@ -1242,8 +1292,209 @@
         let vengoDelBuscador = false; // <-- VARIABLE para el retorno inteligente
 
 
+        // ============ CANDADO DE ENTRADA A LA APP (PIN local, sin Firebase) ============
+        // Reemplaza el login por correo/contraseña de Firebase. La app sigue autenticándose
+        // con Firestore de forma ANÓNIMA y silenciosa por debajo (ver <script type="module">
+        // al final) para poder sincronizar — pero la única puerta que ve la persona es este PIN,
+        // guardado en este dispositivo. Se desbloquea UNA vez y queda recordado permanentemente
+        // (localStorage, no sessionStorage), sin importar que la dirección/puerto local cambie
+        // entre aperturas — por eso ya no depende de que Firebase "recuerde" la sesión.
+        const APP_PIN_DEFAULT = '2026';
+        const APP_PIN_STORAGE_KEY = 'acomaacap_app_pin';
+        const APP_PIN_UNLOCKED_KEY = 'acomaacap_app_desbloqueada';
+        const NOMBRE_PROMOTOR_KEY = 'acomaacap_nombre_promotor';
+
+        function obtenerPinApp() {
+            return localStorage.getItem(APP_PIN_STORAGE_KEY) || APP_PIN_DEFAULT;
+        }
+
+        function appDesbloqueada() {
+            return localStorage.getItem(APP_PIN_UNLOCKED_KEY) === '1';
+        }
+
+        function obtenerNombrePromotor() {
+            return localStorage.getItem(NOMBRE_PROMOTOR_KEY) || '';
+        }
+
+        // Se pide una sola vez (queda guardado en el dispositivo). Solo sirve para que otros
+        // promotores te vean en el panel "Conectados ahora" — no tiene nada que ver con el PIN.
+        function pedirNombrePromotorSiFalta() {
+            if (obtenerNombrePromotor()) return;
+            let nombre = prompt('👤 ¿Cuál es tu nombre? (para que otros promotores te vean conectado)');
+            if (!nombre || !nombre.trim()) nombre = 'Promotor';
+            localStorage.setItem(NOMBRE_PROMOTOR_KEY, nombre.trim());
+        }
+
+        function mostrarPantallaPin(mensaje) {
+            const pantalla = document.getElementById('login-screen');
+            const app = document.getElementById('app-content');
+            if (app) app.style.display = 'none';
+            if (pantalla) pantalla.style.display = 'flex';
+            const err = document.getElementById('login-error');
+            if (err) { err.style.display = mensaje ? 'block' : 'none'; if (mensaje) err.innerText = mensaje; }
+            const input = document.getElementById('login-pin');
+            if (input) { input.value = ''; setTimeout(() => input.focus(), 100); }
+        }
+
+        window.desbloquearApp = function () {
+            const input = document.getElementById('login-pin');
+            const pin = input.value.trim();
+            const errBox = document.getElementById('login-error');
+            errBox.style.display = 'none';
+            if (!pin) { errBox.innerText = 'Ingresa el PIN.'; errBox.style.display = 'block'; return; }
+            if (pin !== obtenerPinApp()) { errBox.innerText = '❌ PIN incorrecto.'; errBox.style.display = 'block'; return; }
+            localStorage.setItem(APP_PIN_UNLOCKED_KEY, '1');
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-content').style.display = 'block';
+            pedirNombrePromotorSiFalta();
+            if (typeof iniciarPresencia === 'function') iniciarPresencia();
+        };
+
+        window.bloquearApp = function () {
+            if (!confirm('¿Bloquear la app? Vas a necesitar el PIN para volver a entrar.')) return;
+            localStorage.removeItem(APP_PIN_UNLOCKED_KEY);
+            if (typeof window.detenerLatidoPresencia === 'function') window.detenerLatidoPresencia();
+            if (typeof window.avisarPresenciaDesconectada === 'function') window.avisarPresenciaDesconectada();
+            mostrarPantallaPin();
+        };
+
+        // Cambiar el PIN desde Ajustes (mismo patrón que las otras contraseñas de la app).
+        function cambiarPinApp() {
+            const actual = prompt('Ingrese el PIN ACTUAL para poder cambiarlo:');
+            if (actual === null) return;
+            if (actual !== obtenerPinApp()) { alert('❌ PIN actual incorrecto.'); return; }
+            const nuevo = prompt('Ingrese el NUEVO PIN:');
+            if (nuevo === null || nuevo.trim() === '') return;
+            const confirmar = prompt('Confirme el NUEVO PIN:');
+            if (nuevo !== confirmar) { alert('❌ Los PIN no coinciden. No se realizó ningún cambio.'); return; }
+            localStorage.setItem(APP_PIN_STORAGE_KEY, nuevo.trim());
+            alert('✅ PIN actualizado correctamente.');
+        }
+        // ============================================================
+
+        // ============ ACTIVAR/DESACTIVAR BLOQUEO REMOTO (protegido por contraseña de Admin) ============
+        function activarBloqueoRemoto() {
+            const clave = prompt('🔒 Contraseña de Administrador para BLOQUEAR la app en todos los dispositivos:');
+            if (clave === null) return;
+            if (clave !== obtenerPasswordAdmin()) { alert('❌ Contraseña incorrecta.'); return; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                alert('📴 Este dispositivo está sin conexión ahora mismo. El bloqueo no se puede enviar sin señal. Prueba desde otro celular con internet, o desde Firebase Console.');
+                return;
+            }
+            const motivo = prompt('Motivo del bloqueo (se les mostrará a todos, opcional):') || '';
+            if (!confirm('¿Confirmas BLOQUEAR la app en TODOS los dispositivos ahora mismo?')) return;
+            if (typeof window.aplicarBloqueoRemotoNube !== 'function') { alert('❌ No disponible.'); return; }
+            window.aplicarBloqueoRemotoNube(true, motivo)
+                .then(() => alert('🚫 Bloqueo enviado. Los demás dispositivos se bloquearán en cuanto tengan señal.'))
+                .catch(e => alert('❌ No se pudo enviar el bloqueo: ' + e.message));
+        }
+
+        function desactivarBloqueoRemoto() {
+            const clave = prompt('🔓 Contraseña de Administrador para DESBLOQUEAR la app:');
+            if (clave === null) return;
+            if (clave !== obtenerPasswordAdmin()) { alert('❌ Contraseña incorrecta.'); return; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                alert('📴 Este dispositivo está sin conexión ahora mismo. No se puede enviar el desbloqueo sin señal.');
+                return;
+            }
+            if (typeof window.aplicarBloqueoRemotoNube !== 'function') { alert('❌ No disponible.'); return; }
+            window.aplicarBloqueoRemotoNube(false, '')
+                .then(() => alert('✅ Desbloqueo enviado.'))
+                .catch(e => alert('❌ No se pudo enviar el desbloqueo: ' + e.message));
+        }
+
+        // Igual que desactivarBloqueoRemoto(), pero utilizable DESDE la propia pantalla de
+        // bloqueo (que no tiene acceso a Ajustes ni a ningún otro botón de la app). Así, el
+        // mismo dispositivo que activó el bloqueo por error, o el administrador en cualquier
+        // otro celular, se puede desbloquear a sí mismo sin depender de Firebase Console.
+        function intentarDesbloqueoRemotoDesdePantalla() {
+            const clave = prompt('🔑 Contraseña de Administrador:');
+            if (clave === null) return;
+            if (clave !== obtenerPasswordAdmin()) { alert('❌ Contraseña incorrecta.'); return; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                alert('📴 Sin conexión ahora mismo. Conéctate a internet/WiFi e intenta de nuevo — el desbloqueo necesita señal para avisarle a los demás dispositivos.');
+                return;
+            }
+            if (typeof window.aplicarBloqueoRemotoNube !== 'function') {
+                alert('❌ Aún no se ha establecido conexión con la nube. Espera unos segundos con señal e intenta de nuevo.');
+                return;
+            }
+            window.aplicarBloqueoRemotoNube(false, '')
+                .then(() => {
+                    // No hace falta esperar al listener de Firestore para reflejarlo aquí mismo.
+                    if (typeof window.aplicarEstadoBloqueoRemoto === 'function') window.aplicarEstadoBloqueoRemoto(false, '');
+                    alert('✅ Bloqueo quitado.');
+                })
+                .catch(e => alert('❌ No se pudo enviar el desbloqueo: ' + e.message));
+        }
+        // ============================================================
+
+        // ============ BLOQUEO REMOTO DE SEGURIDAD ============
+        // Estado cacheado localmente (el último que se alcanzó a sincronizar de la nube), para
+        // poder aplicarlo incluso sin señal en este momento. La verdad "en vivo" viene siempre
+        // de Firestore (ver iniciarListenersNube en el módulo de abajo); esto es solo el respaldo
+        // para cuando la app abre offline.
+        const BLOQUEO_REMOTO_CACHE_KEY = 'acomaacap_bloqueo_remoto_cache';
+
+        function leerBloqueoRemotoCache() {
+            try { return JSON.parse(localStorage.getItem(BLOQUEO_REMOTO_CACHE_KEY) || 'null'); }
+            catch (e) { return null; }
+        }
+
+        function guardarBloqueoRemotoCache(bloqueada, motivo) {
+            localStorage.setItem(BLOQUEO_REMOTO_CACHE_KEY, JSON.stringify({ bloqueada: !!bloqueada, motivo: motivo || '' }));
+        }
+
+        function mostrarPantallaBloqueoRemoto(motivo) {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-content').style.display = 'none';
+            const motivoEl = document.getElementById('bloqueo-remoto-motivo');
+            if (motivoEl) motivoEl.innerText = motivo || '';
+            document.getElementById('pantalla-bloqueo-remoto').style.display = 'flex';
+        }
+
+        // Llamada tanto al abrir la app (con el caché) como en tiempo real (desde el listener
+        // de Firestore) cada vez que cambia el estado de bloqueo.
+        function aplicarEstadoBloqueoRemoto(bloqueada, motivo) {
+            guardarBloqueoRemotoCache(bloqueada, motivo);
+            if (bloqueada) {
+                mostrarPantallaBloqueoRemoto(motivo);
+            } else {
+                // Se desbloqueó: solo oculta la pantalla de bloqueo. Vuelve al estado normal
+                // (PIN o app, según corresponda) sin forzar nada extra.
+                document.getElementById('pantalla-bloqueo-remoto').style.display = 'none';
+                if (appDesbloqueada()) {
+                    document.getElementById('app-content').style.display = 'block';
+                } else {
+                    mostrarPantallaPin();
+                }
+            }
+        }
+        window.aplicarEstadoBloqueoRemoto = aplicarEstadoBloqueoRemoto;
+        // ============================================================
+
         document.addEventListener('DOMContentLoaded', () => {
             cargarFiltrosFecha(); actualizarDashboard(); cargarSelectUsuarios();
+            const inputFechaLimite = document.getElementById('input-fecha-limite-pago');
+            if (inputFechaLimite) inputFechaLimite.value = obtenerFechaLimitePagoDia();
+
+            // Bloqueo remoto: si el último estado conocido (aunque sea offline) era "bloqueada",
+            // no dejamos ni ver el PIN.
+            const cacheBloqueo = leerBloqueoRemotoCache();
+            if (cacheBloqueo && cacheBloqueo.bloqueada) {
+                mostrarPantallaBloqueoRemoto(cacheBloqueo.motivo);
+                return;
+            }
+
+            // Puerta de entrada: si ya se desbloqueó antes en este dispositivo, entra directo
+            // (sin depender de que Firebase recuerde nada). Si no, muestra el PIN.
+            if (appDesbloqueada()) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                if (typeof iniciarPresencia === 'function') iniciarPresencia();
+            } else {
+                mostrarPantallaPin();
+            }
         });
 
         // ============ TRUCO SECRETO: REVELAR BOTÓN "CONTABILIDAD" ============
@@ -1370,6 +1621,65 @@
             }
             localStorage.setItem(COBRAR_PASS_STORAGE_KEY, nueva);
             alert("✅ Contraseña de Cobrar actualizada correctamente.");
+        }
+        // ============================================================
+
+        // ============ FECHA LÍMITE DE PAGO (configurable) ============
+        // Día del mes que se muestra en los recibos como última fecha de pago
+        // (por defecto el 22, según lo definido para ACOMAACAP). Se guarda en
+        // este dispositivo (localStorage) y también en la nube (Firestore,
+        // colección 'configuracion', documento 'general') para que todos los
+        // dispositivos usen siempre el mismo valor.
+        const FECHA_LIMITE_PAGO_STORAGE_KEY = 'acomaacap_fecha_limite_pago_dia';
+        const FECHA_LIMITE_PAGO_DEFAULT = 22;
+
+        function obtenerFechaLimitePagoDia() {
+            const v = parseInt(localStorage.getItem(FECHA_LIMITE_PAGO_STORAGE_KEY));
+            return (!isNaN(v) && v >= 1 && v <= 31) ? v : FECHA_LIMITE_PAGO_DEFAULT;
+        }
+
+        // Guarda el nuevo día localmente de inmediato (para que funcione sin internet)
+        // y además intenta sincronizarlo a la nube para que se propague a los demás
+        // dispositivos en tiempo real.
+        function guardarFechaLimitePagoDia(dia, { sincronizarNube = true } = {}) {
+            localStorage.setItem(FECHA_LIMITE_PAGO_STORAGE_KEY, String(dia));
+            const input = document.getElementById('input-fecha-limite-pago');
+            if (input) input.value = dia;
+            if (sincronizarNube && typeof window.syncFechaLimitePago === 'function') {
+                window.syncFechaLimitePago(dia).catch(e => console.warn('No se pudo sincronizar la fecha límite de pago a la nube:', e));
+            }
+        }
+
+        // Llamado desde el botón "Guardar" en Ajustes
+        function actualizarFechaLimitePagoDesdeAjustes() {
+            const input = document.getElementById('input-fecha-limite-pago');
+            const dia = parseInt(input.value);
+            if (isNaN(dia) || dia < 1 || dia > 31) {
+                alert('❌ Ingresa un día válido del 1 al 31.');
+                return;
+            }
+            guardarFechaLimitePagoDia(dia);
+            alert(`✅ Fecha límite de pago actualizada: día ${dia} de cada mes.`);
+        }
+
+        // Calcula la fecha límite de pago real (día configurado + mes/año del recibo), con el
+        // mes escrito en letras (ej. "22 de Julio 2026").
+        // fechaRecibo debe venir en formato dd/mm/yyyy (como se guarda en r.fecha).
+        const NOMBRES_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        function calcularFechaLimitePago(fechaRecibo) {
+            const partes = (fechaRecibo || '').split('/');
+            if (partes.length !== 3) return '';
+            const mesIx = parseInt(partes[1], 10) - 1;
+            const anio = partes[2];
+            const dia = obtenerFechaLimitePagoDia();
+            const nombreMes = NOMBRES_MESES[mesIx] || partes[1];
+            return `${dia} de ${nombreMes} ${anio}`;
+        }
+
+        // Texto ya formateado, listo para imprimir en los recibos (Bluetooth y PDF).
+        // fechaRecibo: la fecha de emisión del recibo (r.fecha), usada para tomar su mes/año.
+        function textoFechaLimitePago(fechaRecibo) {
+            return `Fecha límite de pago: ${calcularFechaLimitePago(fechaRecibo)}`;
         }
         // ============================================================
 
@@ -3255,6 +3565,16 @@
             const reciboActual = recibos.find(r => r.id == id);
             if(!reciboActual) return;
 
+            // Protección contra doble cobro: si este dispositivo aún no se ha sincronizado
+            // desde que OTRO celular ya cobró este mismo recibo, la lista de "pendientes" puede
+            // estar desactualizada. Avisamos ANTES de registrar un segundo cobro accidental.
+            if (reciboActual.estado === 'pagado') {
+                const yaPagadoMsg = `⚠️ Este recibo (N° ${reciboActual.numero || ''}, ${reciboActual.nombre || ''}) YA aparece como PAGADO`
+                    + (reciboActual.fechaPago ? ` desde el ${reciboActual.fechaPago}` : '')
+                    + `.\n\nEsto puede significar que otro celular ya lo cobró y tu app aún no se ha sincronizado con la nube.\n\nToca "Sincronizar" y vuelve a revisar antes de cobrar de nuevo.\n\n¿Cobrar de todas formas? (esto generará un cobro duplicado en Ingresos)`;
+                if (!confirm(yaPagadoMsg)) return;
+            }
+
             // 1. Obtener todos los recibos ANTERIORES que están pendientes (componen la Mora)
             const recibosPendientesAnteriores = recibos.filter(r =>
                 r.usuarioId == reciboActual.usuarioId &&
@@ -3574,14 +3894,24 @@
             }
 
             t += "\n";
+            // Tamaño de letra doble (ancho y alto) para que el total resalte sobre el resto
+            // del recibo. GS ! n -> n=0x11 (doble ancho + doble alto), n=0x00 restaura el tamaño normal.
+            const TAMANO_DOBLE = "\x1D\x21\x11";
+            const TAMANO_NORMAL = "\x1D\x21\x00";
             t += NEGRITA_ON;
+            t += TAMANO_DOBLE;
             if (pagado) {
-                t += `TOTAL PAGADO:     $${granTotal.toFixed(2).padStart(7)}\n`;
+                t += `TOTAL PAGADO:\n$${granTotal.toFixed(2)}\n`;
             } else {
-                t += `TOTAL A PAGAR:    $${granTotal.toFixed(2).padStart(7)}\n`;
+                t += `TOTAL A PAGAR:\n$${granTotal.toFixed(2)}\n`;
             }
+            t += TAMANO_NORMAL;
             t += NEGRITA_OFF;
             t += "--------------------------------\n";
+            if (!pagado) {
+                t += `Fecha limite de pago:\n${calcularFechaLimitePago(r.fecha)}\n`;
+                t += "--------------------------------\n";
+            }
 
             if(!pagado && deudaPendiente > 0) {
                 t += "\n      ** AVISO DE MORA **\n";
@@ -3658,6 +3988,14 @@
             }
             document.getElementById('t-label-mora').innerText = pagado ? 'Saldo Incluido:' : 'Saldo Ant/Mora:';
             document.getElementById('t-label-total').innerText = pagado ? 'TOTAL PAGADO' : 'TOTAL';
+            const elFechaLimite = document.getElementById('t-fecha-limite-pago');
+            if (!pagado) {
+                elFechaLimite.innerText = textoFechaLimitePago(r.fecha);
+                elFechaLimite.style.display = 'block';
+            } else {
+                elFechaLimite.innerText = '';
+                elFechaLimite.style.display = 'none';
+            }
             document.getElementById('t-footer-linea1').innerText = pagado ? '¡GRACIAS POR SU PAGO!' : '';
             document.getElementById('t-footer-linea2').innerText = pagado
                 ? 'Conserve este comprobante como constancia de su pago.'
@@ -3763,7 +4101,12 @@
                     linea(`Extra: $${extra.toFixed(2)}${r.extraDetalle ? ' (' + r.extraDetalle + ')' : ''}`, { size: 8, center: false, gap: 5 });
                 }
                 separador();
-                linea(`${pagado ? 'TOTAL PAGADO' : 'TOTAL'}: $${granTotal.toFixed(2)}`, { size: 12, bold: true, gap: 7 });
+                linea(`${pagado ? 'TOTAL PAGADO' : 'TOTAL A PAGAR'}`, { size: 10, bold: true, gap: 5 });
+                linea(`$${granTotal.toFixed(2)}`, { size: 20, bold: true, gap: 9 });
+                if (!pagado) {
+                    separador();
+                    linea(textoFechaLimitePago(r.fecha), { size: 8, bold: true, gap: 5 });
+                }
 
                 if (pagado) {
                     linea('¡GRACIAS POR SU PAGO!', { size: 8.5, bold: true, gap: 4.5 });
@@ -4068,6 +4411,372 @@
                 detalle: recibo ? (recibo.extraDetalle || '') : '',
                 recibo
             };
+        }
+
+        // Lee los movimientos de Caja relacionados con Agua. Caja guarda TODO en 'caja_movimientos'
+        // (localStorage compartido, misma app/origen), así que podemos leerlo directamente desde
+        // aquí sin abrir esa app. Se filtra solo lo que vino del cobro de un recibo de agua.
+        function leerMovimientosCajaAgua() {
+            let movimientosCaja = [];
+            try { movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]'); } catch (e) { movimientosCaja = []; }
+            return movimientosCaja.filter(m => {
+                if (m.tipo !== 'entrada') return false;
+                if (m.reciboId !== undefined && m.reciboId !== null) return true;
+                const c = (m.concepto || '').toLowerCase();
+                return c.indexOf('recaudación agua') !== -1 || c.indexOf('recaudacion agua') !== -1 || c.indexOf('pago recibo agua') !== -1;
+            });
+        }
+        // Movimientos antiguos (migrados) no siempre traen "reciboId": en esos casos su "id"
+        // ES el id del recibo original.
+        function reciboIdDeMovimientoCaja(m) {
+            return (m.reciboId !== undefined && m.reciboId !== null) ? m.reciboId : m.id;
+        }
+
+        // ================== DIAGNÓSTICO: CUADRE ENTRE "RECAUDACIÓN DE COBROS" (recibos) E "INGRESOS" (contabilidad) ==================
+        // "Recaudación de Cobros" suma directamente los recibos con estado='pagado'.
+        // "Ingresos" suma la bitácora "contabilidad" (un registro que se crea automáticamente
+        // por cada recibo al momento de cobrarlo). En un sistema offline con varios celulares
+        // sincronizando, ambas fuentes se pueden desincronizar (ej: un recibo se borra en un
+        // celular pero, por falta de señal, su registro de contabilidad no se borra a tiempo
+        // en otro; o un mismo cobro se sincroniza dos veces). Esta herramienta compara ambas
+        // fuentes recibo por recibo y señala exactamente dónde está la diferencia.
+        //
+        // Además compara contra Caja (colección 'movimientos' en la nube), porque cada cobro
+        // de agua debe generar TAMBIÉN un movimiento ahí — y esa sincronización es INDEPENDIENTE
+        // de la de "contabilidad", así que puede fallar sola sin que se note en Ingresos.
+        function diagnosticarCuadreRecaudacion() {
+            const pagados = recibos.filter(r => r.estado === 'pagado');
+            const porRecibo = {};
+            contabilidad.forEach(c => {
+                if (!porRecibo[c.reciboId]) porRecibo[c.reciboId] = [];
+                porRecibo[c.reciboId].push(c);
+            });
+
+            const totalPagados = pagados.reduce((a, r) => a + totalRecibo(r), 0);
+            const totalContabilidad = contabilidad.reduce((a, c) => a + (parseFloat(c.monto) || 0), 0);
+
+            const faltantes = [];    // recibo pagado, SIN registro en contabilidad
+            const duplicados = [];   // recibo con MÁS DE UN registro en contabilidad
+            const descuadrados = []; // recibo con registro(s), pero el monto no coincide
+
+            pagados.forEach(r => {
+                const entradas = porRecibo[r.id] || [];
+                if (entradas.length === 0) { faltantes.push(r); return; }
+                if (entradas.length > 1) duplicados.push({ recibo: r, entradas });
+                const sumaContab = entradas.reduce((a, c) => a + (parseFloat(c.monto) || 0), 0);
+                const esperado = totalRecibo(r);
+                if (Math.abs(sumaContab - esperado) > 0.001) {
+                    descuadrados.push({ recibo: r, entradas, sumaContab, esperado });
+                }
+            });
+
+            // Registros de "contabilidad" cuyo recibo ya no existe (posible recibo eliminado
+            // después de haber sido cobrado, sin que se haya limpiado su registro de Ingresos).
+            const huerfanos = contabilidad.filter(c => !recibos.some(r => r.id === c.reciboId));
+
+            // --- Comparación contra Caja ---
+            const movsCajaAgua = leerMovimientosCajaAgua();
+            const porReciboCaja = {};
+            movsCajaAgua.forEach(m => {
+                const rid = reciboIdDeMovimientoCaja(m);
+                (porReciboCaja[rid] = porReciboCaja[rid] || []).push(m);
+            });
+            const totalCaja = movsCajaAgua.reduce((a, m) => a + (parseFloat(m.total) || 0), 0);
+
+            const faltantesEnCaja = [];
+            const duplicadosEnCaja = [];
+            const descuadradosCaja = [];
+            pagados.forEach(r => {
+                const entradas = porReciboCaja[r.id] || [];
+                if (entradas.length === 0) { faltantesEnCaja.push(r); return; }
+                if (entradas.length > 1) duplicadosEnCaja.push({ recibo: r, entradas });
+                const suma = entradas.reduce((a, m) => a + (parseFloat(m.total) || 0), 0);
+                const esperado = totalRecibo(r);
+                if (Math.abs(suma - esperado) > 0.001) descuadradosCaja.push({ recibo: r, entradas, suma, esperado });
+            });
+            const huerfanosCaja = movsCajaAgua.filter(m => !recibos.some(r => r.id === reciboIdDeMovimientoCaja(m)));
+
+            return {
+                totalPagados, totalContabilidad,
+                diferencia: totalContabilidad - totalPagados,
+                faltantes, duplicados, descuadrados, huerfanos,
+                totalCaja, diferenciaCaja: totalCaja - totalPagados,
+                faltantesEnCaja, duplicadosEnCaja, descuadradosCaja, huerfanosCaja
+            };
+        }
+
+        function mostrarDiagnosticoCuadre() {
+            document.getElementById('modal-diagnostico').style.display = 'flex';
+            renderDiagnosticoCuadre();
+        }
+
+        function bloqueDiagnostico(titulo, resumen, lineas, accionRepararFn) {
+            const listaHtml = lineas.slice(0, 30).map(l =>
+                `<div style="padding:6px 8px; border-bottom:1px solid #f5f5f5; font-size:0.76rem;">${l}</div>`
+            ).join('');
+            const masTexto = lineas.length > 30
+                ? `<div style="padding:6px 8px; font-size:0.72rem; color:#999;">...y ${lineas.length - 30} más</div>` : '';
+            const botonReparar = accionRepararFn
+                ? `<div style="padding:8px 12px;"><button type="button" class="btn btn-primary" style="margin:0; width:100%;" onclick="${accionRepararFn}">🔧 Reparar automáticamente</button></div>` : '';
+            return `
+                <div style="border:1px solid #eee; border-radius:10px; margin-bottom:14px; overflow:hidden;">
+                    <div style="background:#fafafa; padding:10px 12px;">
+                        <strong style="font-size:0.88rem;">${titulo}</strong>
+                        <p style="margin:4px 0 0; font-size:0.76rem; color:#666;">${resumen}</p>
+                    </div>
+                    <div style="max-height:150px; overflow-y:auto;">${listaHtml}${masTexto}</div>
+                    ${botonReparar}
+                </div>`;
+        }
+
+        function renderDiagnosticoCuadre() {
+            const d = diagnosticarCuadreRecaudacion();
+            const cont = document.getElementById('diag-contenido');
+            const hayDiferencia = Math.abs(d.diferencia) > 0.001;
+            const hayDiferenciaCaja = Math.abs(d.diferenciaCaja) > 0.001;
+
+            let html = `
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
+                    <div style="background:#fff3e0; border-radius:10px; padding:8px 4px; text-align:center;">
+                        <div style="font-size:0.62rem; color:#ef6c00; font-weight:700;">RECAUDACIÓN<br>(recibos)</div>
+                        <div style="font-size:0.95rem; font-weight:800;">$${d.totalPagados.toFixed(2)}</div>
+                    </div>
+                    <div style="background:#e8f5e9; border-radius:10px; padding:8px 4px; text-align:center;">
+                        <div style="font-size:0.62rem; color:#2e7d32; font-weight:700;">INGRESOS<br>(contabilidad)</div>
+                        <div style="font-size:0.95rem; font-weight:800;">$${d.totalContabilidad.toFixed(2)}</div>
+                    </div>
+                    <div style="background:#e3f2fd; border-radius:10px; padding:8px 4px; text-align:center;">
+                        <div style="font-size:0.62rem; color:#1565c0; font-weight:700;">CAJA<br>(agua)</div>
+                        <div style="font-size:0.95rem; font-weight:800;">$${d.totalCaja.toFixed(2)}</div>
+                    </div>
+                </div>
+                <div style="text-align:center; margin-bottom:6px; font-weight:800; font-size:0.85rem; color:${hayDiferencia ? '#c62828' : '#2e7d32'};">
+                    Ingresos vs Recaudación: $${d.diferencia.toFixed(2)} ${hayDiferencia ? '⚠️' : '✅'}
+                </div>
+                <div style="text-align:center; margin-bottom:16px; font-weight:800; font-size:0.85rem; color:${hayDiferenciaCaja ? '#c62828' : '#2e7d32'};">
+                    Caja vs Recaudación: $${d.diferenciaCaja.toFixed(2)} ${hayDiferenciaCaja ? '⚠️' : '✅'}
+                </div>`;
+
+            if (d.huerfanos.length) {
+                const suma = d.huerfanos.reduce((a, c) => a + (parseFloat(c.monto) || 0), 0);
+                html += bloqueDiagnostico(
+                    '🧾 Registros de Ingresos sin recibo (huérfanos)',
+                    `${d.huerfanos.length} registro(s) por $${suma.toFixed(2)} — probablemente de recibos que fueron eliminados DESPUÉS de haberse cobrado.`,
+                    d.huerfanos.map(c => `${c.fecha || '(sin fecha)'} · ${c.cliente || '(sin nombre)'} · $${(parseFloat(c.monto) || 0).toFixed(2)}`),
+                    'repararHuerfanosYRefrescar()'
+                );
+            }
+
+            if (d.duplicados.length) {
+                const suma = d.duplicados.reduce((a, x) => {
+                    const ord = [...x.entradas].sort((p, q) => (p.id || 0) - (q.id || 0));
+                    return a + ord.slice(1).reduce((s, c) => s + (parseFloat(c.monto) || 0), 0);
+                }, 0);
+                html += bloqueDiagnostico(
+                    '📑 Recibos con cobro duplicado en Ingresos',
+                    `${d.duplicados.length} recibo(s) con más de un registro — sobrante de $${suma.toFixed(2)}.`,
+                    d.duplicados.map(x => `#${x.recibo.numero || x.recibo.id} · ${x.recibo.nombre || ''} · ${x.entradas.length} registros`),
+                    'repararDuplicadosYRefrescar()'
+                );
+            }
+
+            if (d.faltantes.length) {
+                const suma = d.faltantes.reduce((a, r) => a + totalRecibo(r), 0);
+                html += bloqueDiagnostico(
+                    '❓ Recibos pagados sin registro en Ingresos',
+                    `${d.faltantes.length} recibo(s) por $${suma.toFixed(2)} — aparecen en Recaudación pero nunca se contabilizaron en Ingresos.`,
+                    d.faltantes.map(r => `#${r.numero || r.id} · ${r.nombre || ''} · $${totalRecibo(r).toFixed(2)}`),
+                    'repararFaltantesYRefrescar()'
+                );
+            }
+
+            if (d.descuadrados.length) {
+                html += bloqueDiagnostico(
+                    '⚖️ Recibos donde el monto no coincide con Ingresos (revisar a mano)',
+                    `${d.descuadrados.length} recibo(s) — el monto del recibo no coincide con lo registrado en Ingresos. Esto NO se repara automáticamente porque no se sabe cuál valor es el correcto.`,
+                    d.descuadrados.map(x => `#${x.recibo.numero || x.recibo.id} · ${x.recibo.nombre || ''} · Recibo: $${x.esperado.toFixed(2)} vs Ingresos: $${x.sumaContab.toFixed(2)}`),
+                    null
+                );
+            }
+
+            if (d.huerfanosCaja.length) {
+                const suma = d.huerfanosCaja.reduce((a, m) => a + (parseFloat(m.total) || 0), 0);
+                html += bloqueDiagnostico(
+                    '🧾 Movimientos de Caja sin recibo (huérfanos)',
+                    `${d.huerfanosCaja.length} movimiento(s) en Caja por $${suma.toFixed(2)} — probablemente de recibos eliminados después de cobrados.`,
+                    d.huerfanosCaja.map(m => `${m.fecha || '(sin fecha)'} · ${m.concepto || ''} · $${(parseFloat(m.total) || 0).toFixed(2)}`),
+                    'repararHuerfanosCajaYRefrescar()'
+                );
+            }
+
+            if (d.duplicadosEnCaja.length) {
+                const suma = d.duplicadosEnCaja.reduce((a, x) => {
+                    const ord = [...x.entradas].sort((p, q) => (p.id || 0) - (q.id || 0));
+                    return a + ord.slice(1).reduce((s, m) => s + (parseFloat(m.total) || 0), 0);
+                }, 0);
+                html += bloqueDiagnostico(
+                    '📑 Recibos con cobro duplicado en Caja',
+                    `${d.duplicadosEnCaja.length} recibo(s) con más de un movimiento en Caja — sobrante de $${suma.toFixed(2)}.`,
+                    d.duplicadosEnCaja.map(x => `#${x.recibo.numero || x.recibo.id} · ${x.recibo.nombre || ''} · ${x.entradas.length} movimientos en Caja`),
+                    'repararDuplicadosCajaYRefrescar()'
+                );
+            }
+
+            if (d.faltantesEnCaja.length) {
+                const suma = d.faltantesEnCaja.reduce((a, r) => a + totalRecibo(r), 0);
+                html += bloqueDiagnostico(
+                    '❓ Recibos pagados que nunca llegaron a Caja',
+                    `${d.faltantesEnCaja.length} recibo(s) por $${suma.toFixed(2)} — están en Recaudación e Ingresos, pero NUNCA se registraron en Caja (fallo de sincronización con la otra app).`,
+                    d.faltantesEnCaja.map(r => `#${r.numero || r.id} · ${r.nombre || ''} · $${totalRecibo(r).toFixed(2)} · ${r.fechaPago || ''}`),
+                    'repararFaltantesEnCajaYRefrescar()'
+                );
+            }
+
+            if (d.descuadradosCaja.length) {
+                html += bloqueDiagnostico(
+                    '⚖️ Recibos donde el monto no coincide con Caja (revisar a mano)',
+                    `${d.descuadradosCaja.length} recibo(s) — el monto del recibo no coincide con lo registrado en Caja. Esto NO se repara automáticamente.`,
+                    d.descuadradosCaja.map(x => `#${x.recibo.numero || x.recibo.id} · ${x.recibo.nombre || ''} · Recibo: $${x.esperado.toFixed(2)} vs Caja: $${x.suma.toFixed(2)}`),
+                    null
+                );
+            }
+
+            if (!d.huerfanos.length && !d.duplicados.length && !d.faltantes.length && !d.descuadrados.length &&
+                !d.huerfanosCaja.length && !d.duplicadosEnCaja.length && !d.faltantesEnCaja.length && !d.descuadradosCaja.length) {
+                html += `<p style="text-align:center; color:#2e7d32; font-weight:700;">✅ No se encontraron diferencias entre Recaudación, Ingresos y Caja.</p>`;
+            }
+
+            cont.innerHTML = html;
+        }
+
+        function repararHuerfanosYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.huerfanos.length) return;
+            const suma = d.huerfanos.reduce((a, c) => a + (parseFloat(c.monto) || 0), 0);
+            if (!confirm(`¿Eliminar ${d.huerfanos.length} registro(s) de Ingresos que ya no tienen un recibo asociado?\n\nEsto reducirá el total de Ingresos en $${suma.toFixed(2)}.`)) return;
+            d.huerfanos.forEach(c => {
+                const ix = contabilidad.findIndex(x => x.id === c.id);
+                if (ix > -1) contabilidad.splice(ix, 1);
+                if (typeof eliminarContabilidadNube === 'function') eliminarContabilidadNube(c.id);
+            });
+            localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+            actualizarResumenContable();
+            renderDiagnosticoCuadre();
+            alert('✅ Registros huérfanos eliminados.');
+        }
+
+        function repararDuplicadosYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.duplicados.length) return;
+            if (!confirm(`¿Eliminar los registros de Ingresos duplicados, dejando solo uno por recibo?`)) return;
+            let borrados = 0;
+            d.duplicados.forEach(({ entradas }) => {
+                const ord = [...entradas].sort((a, b) => (a.id || 0) - (b.id || 0));
+                ord.slice(1).forEach(c => {
+                    const ix = contabilidad.findIndex(x => x.id === c.id);
+                    if (ix > -1) contabilidad.splice(ix, 1);
+                    if (typeof eliminarContabilidadNube === 'function') eliminarContabilidadNube(c.id);
+                    borrados++;
+                });
+            });
+            localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+            actualizarResumenContable();
+            renderDiagnosticoCuadre();
+            alert(`✅ ${borrados} registro(s) duplicado(s) eliminado(s).`);
+        }
+
+        function repararFaltantesYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.faltantes.length) return;
+            const suma = d.faltantes.reduce((a, r) => a + totalRecibo(r), 0);
+            if (!confirm(`¿Crear el registro de Ingresos faltante para ${d.faltantes.length} recibo(s) ya pagados?\n\nEsto aumentará el total de Ingresos en $${suma.toFixed(2)}.`)) return;
+            d.faltantes.forEach((r, idx) => {
+                const nuevo = {
+                    id: Date.now() + idx,
+                    fecha: r.fechaPago || r.fecha || new Date().toLocaleDateString('es-ES'),
+                    reciboId: r.id,
+                    monto: totalRecibo(r),
+                    cliente: r.nombre
+                };
+                contabilidad.push(nuevo);
+                if (typeof syncContabilidad === 'function') syncContabilidad(nuevo);
+            });
+            localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
+            actualizarResumenContable();
+            renderDiagnosticoCuadre();
+            alert('✅ Registros faltantes creados.');
+        }
+
+        function repararHuerfanosCajaYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.huerfanosCaja.length) return;
+            const suma = d.huerfanosCaja.reduce((a, m) => a + (parseFloat(m.total) || 0), 0);
+            if (!confirm(`¿Eliminar ${d.huerfanosCaja.length} movimiento(s) de Caja que ya no tienen un recibo asociado?\n\nEsto reducirá el total de Caja en $${suma.toFixed(2)}.`)) return;
+            let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+            const idsBorrar = new Set(d.huerfanosCaja.map(m => m.id));
+            movimientosCaja = movimientosCaja.filter(m => !idsBorrar.has(m.id));
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+            d.huerfanosCaja.forEach(m => { if (typeof eliminarMovimientoCajaNube === 'function') eliminarMovimientoCajaNube(m.id); });
+            renderDiagnosticoCuadre();
+            alert('✅ Movimientos huérfanos eliminados de Caja.');
+        }
+
+        function repararDuplicadosCajaYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.duplicadosEnCaja.length) return;
+            if (!confirm(`¿Eliminar los movimientos de Caja duplicados, dejando solo uno por recibo?`)) return;
+            let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+            let borrados = 0;
+            d.duplicadosEnCaja.forEach(({ entradas }) => {
+                const ord = [...entradas].sort((a, b) => (a.id || 0) - (b.id || 0));
+                ord.slice(1).forEach(m => {
+                    movimientosCaja = movimientosCaja.filter(x => x.id !== m.id);
+                    if (typeof eliminarMovimientoCajaNube === 'function') eliminarMovimientoCajaNube(m.id);
+                    borrados++;
+                });
+            });
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+            renderDiagnosticoCuadre();
+            alert(`✅ ${borrados} movimiento(s) duplicado(s) eliminado(s) de Caja.`);
+        }
+
+        async function repararFaltantesEnCajaYRefrescar() {
+            const d = diagnosticarCuadreRecaudacion();
+            if (!d.faltantesEnCaja.length) return;
+            const suma = d.faltantesEnCaja.reduce((a, r) => a + totalRecibo(r), 0);
+            if (!confirm(`¿Crear en Caja el/los movimiento(s) que faltan para ${d.faltantesEnCaja.length} recibo(s) ya pagados?\n\nEsto aumentará el total de Caja en $${suma.toFixed(2)}. Se les asignará número de ticket nuevo.`)) return;
+            let movimientosCaja = JSON.parse(localStorage.getItem('caja_movimientos') || '[]');
+            for (let idx = 0; idx < d.faltantesEnCaja.length; idx++) {
+                const r = d.faltantesEnCaja[idx];
+                const idBase = Date.now() + idx + 500000;
+                const movimientoCajaChica = {
+                    id: idBase,
+                    tipo: 'entrada',
+                    reciboId: r.id,
+                    fecha: r.fechaPago || r.fecha || new Date().toLocaleDateString('es-ES'),
+                    hora: r.horaPago || new Date().toLocaleTimeString('es-ES'),
+                    timestamp: Date.now() + idx,
+                    admin: 'Sistema de Agua (Reparación de Cuadre)',
+                    concepto: 'Recaudación Agua: ' + r.nombre + ' (' + r.mesFacturado + ')',
+                    recibe: 'Sistema de Agua',
+                    total: totalRecibo(r),
+                    items: [{ desc: 'Consumo Agua: ' + r.nombre + ' (#' + r.numero + ') - ' + r.mesFacturado, cant: 1, precio: totalRecibo(r) }]
+                };
+                try {
+                    if (typeof generarNumeroTicketCaja === 'function') {
+                        const numInfo = await generarNumeroTicketCaja();
+                        movimientoCajaChica.numeroRecibo = numInfo.numero;
+                        movimientoCajaChica.numeroFormateado = numInfo.formateado;
+                        movimientoCajaChica.numeroOrigen = numInfo.origen;
+                        movimientoCajaChica.numeroPendiente = numInfo.pendiente;
+                    }
+                } catch (e) { console.error('No se pudo generar número de ticket:', e); }
+                movimientosCaja.push(movimientoCajaChica);
+                if (typeof syncMovimientoCaja === 'function') syncMovimientoCaja(movimientoCajaChica);
+            }
+            localStorage.setItem('caja_movimientos', JSON.stringify(movimientosCaja));
+            renderDiagnosticoCuadre();
+            alert('✅ Movimientos faltantes creados en Caja.');
         }
 
         function cargarFiltrosFondosCalle() {
@@ -4423,7 +5132,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import {
-            getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+            getAuth, onAuthStateChanged, signInAnonymously,
+            setPersistence, browserLocalPersistence
         } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
         import {
             initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -4442,6 +5152,11 @@
 
         const fbApp = initializeApp(firebaseConfig);
         const auth = getAuth(fbApp);
+        // Fuerza explícitamente la persistencia "local": la sesión debe sobrevivir a cerrar y
+        // volver a abrir la app, sin pedir correo cada vez. Se hace explícito (en vez de confiar
+        // en el valor por defecto) porque algunos WebViews/navegadores restringidos en Android
+        // no siempre respetan el default y caen a persistencia solo-de-sesión.
+        setPersistence(auth, browserLocalPersistence).catch(e => console.error('No se pudo fijar persistencia de sesión:', e));
         // Cache local persistente: la app sigue funcionando sin internet y sincroniza al reconectar.
         const db = initializeFirestore(fbApp, {
             localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
@@ -4495,44 +5210,33 @@
             setSyncText('📴 Sin conexión (modo local)', 'offline');
         }
 
-        // "Vigilante" de arranque: si tras 6 segundos seguimos sin resolver sesión
-        // (pantalla de login visible) y no hay internet, avisamos que puede deberse
-        // a falta de conexión, para que no parezca que la app está trabada.
+        // "Vigilante" de arranque: si tras 6 segundos seguimos sin poder autenticar con la nube
+        // (por falta de señal), lo indicamos en el punto de estado — pero esto YA NO bloquea el
+        // uso de la app: con el PIN local, la persona entra y trabaja offline igual, y la
+        // sincronización se pone al día sola en cuanto haya señal.
         setTimeout(() => {
-            const loginVisible = document.getElementById('login-screen') && document.getElementById('login-screen').style.display !== 'none';
-            const errBox = document.getElementById('login-error');
-            if (loginVisible && typeof navigator !== 'undefined' && navigator.onLine === false && errBox && errBox.style.display !== 'block') {
-                errBox.innerText = '📴 Sin conexión. Si ya iniciaste sesión antes en este celular, revisa tu señal/WiFi e intenta de nuevo.';
-                errBox.style.display = 'block';
+            if (!auth.currentUser && typeof navigator !== 'undefined' && navigator.onLine === false) {
+                setSyncText('📴 Sin conexión (modo local)', 'offline');
             }
         }, 6000);
 
-        // ---------- LOGIN ----------
-        // Mensajes de error específicos por código de Firebase, en vez de mostrar siempre
-        // "contraseña incorrecta" (que es engañoso cuando el problema real es de conexión).
-        function mensajeErrorLogin(err) {
-            const codigo = err && err.code;
-            if (codigo === 'auth/network-request-failed') {
-                return '📴 No hay conexión a internet. Verifica tu señal/WiFi e intenta de nuevo.';
-            }
-            if (codigo === 'auth/too-many-requests') {
-                return '⏳ Demasiados intentos. Espera un momento antes de volver a intentar.';
-            }
-            if (codigo === 'auth/invalid-credential' || codigo === 'auth/wrong-password' || codigo === 'auth/user-not-found') {
-                return '❌ Correo o contraseña incorrectos.';
-            }
-            if (codigo === 'auth/invalid-email') {
-                return '❌ El correo no tiene un formato válido.';
-            }
-            if (codigo === 'timeout') {
-                return '⏱️ No se pudo conectar (tardó demasiado). Verifica tu señal e intenta de nuevo.';
-            }
-            return '❌ No se pudo iniciar sesión (' + (codigo || 'error desconocido') + '). Intenta de nuevo.';
+        // ---------- AUTENTICACIÓN ANÓNIMA SILENCIOSA ----------
+        // La app ya NO pide correo/contraseña: el acceso lo controla el PIN local (ver el
+        // <script> de arriba, función desbloquearApp/mostrarPantallaPin). Pero las reglas de
+        // Firestore exigen "request.auth != null" para poder leer/escribir, así que aquí, por
+        // debajo y sin que la persona vea nada, se autentica de forma anónima. Si falla (sin
+        // señal), se reintenta solo al recuperar conexión — la app sigue funcionando offline
+        // con los datos locales mientras tanto.
+        function autenticarAnonimoSilencioso() {
+            if (auth.currentUser) return;
+            signInAnonymously(auth).catch(e => console.error('No se pudo autenticar con la nube (revisa la señal):', e));
         }
+        autenticarAnonimoSilencioso();
+        window.addEventListener('online', autenticarAnonimoSilencioso);
 
-        // Da un tiempo límite a la petición de login: si Firebase no responde (señal falsa,
+        // Da un tiempo límite a una petición: si Firebase no responde (señal falsa,
         // "rayitas" sin datos reales), rechaza con un error de tipo "timeout" en vez de
-        // dejar el botón colgado en "Entrando..." para siempre sin avisar nada.
+        // dejar la app colgada para siempre sin avisar nada.
         function conTimeout(promesa, ms) {
             return Promise.race([
                 promesa,
@@ -4540,24 +5244,10 @@
             ]);
         }
 
-        window.iniciarSesion = function () {
-            const email = document.getElementById('login-email').value.trim();
-            const pass = document.getElementById('login-pass').value;
-            const errBox = document.getElementById('login-error');
-            const btn = document.getElementById('btn-login');
-            errBox.style.display = 'none';
-            if (!email || !pass) { errBox.innerText = 'Ingresa correo y contraseña.'; errBox.style.display = 'block'; return; }
-            btn.disabled = true; btn.innerText = 'Entrando...';
-            conTimeout(signInWithEmailAndPassword(auth, email, pass), 15000)
-                .catch((err) => { errBox.innerText = mensajeErrorLogin(err); errBox.style.display = 'block'; })
-                .finally(() => { btn.disabled = false; btn.innerText = '🔑 Entrar'; });
-        };
-
-        window.cerrarSesion = function () {
-            if (!confirm('¿Cerrar sesión?')) return;
-            if (intervaloLatido) { clearInterval(intervaloLatido); intervaloLatido = null; }
+        // El "Bloquear app" (PIN) es lo que ve la persona — ver window.bloquearApp en el
+        // <script> de arriba. Aquí solo limpiamos la presencia en la nube al bloquear.
+        window.avisarPresenciaDesconectada = function () {
             deleteDoc(doc(db, 'presencia', idDispositivo())).catch(() => {});
-            signOut(auth);
         };
 
         // ---------- SINCRONIZACIÓN EN TIEMPO REAL ----------
@@ -4629,6 +5319,21 @@
                 primeraCargaContabilidad = false;
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
+            // Configuración general (día de "fecha límite de pago" + bloqueo remoto de seguridad)
+            onSnapshot(doc(db, 'configuracion', 'general'), (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+                const dia = data.fechaLimitePagoDia;
+                if (dia && dia !== obtenerFechaLimitePagoDia()) {
+                    guardarFechaLimitePagoDia(dia, { sincronizarNube: false });
+                }
+                // Bloqueo remoto: se aplica en tiempo real, incluso si la app ya está abierta
+                // (saca a la persona de inmediato en cuanto llega la orden de bloqueo).
+                if (typeof window.aplicarEstadoBloqueoRemoto === 'function') {
+                    window.aplicarEstadoBloqueoRemoto(!!data.bloqueadaRemota, data.motivoBloqueo || '');
+                }
+            }, err => console.error('Error escuchando configuración general:', err));
+
             iniciarPresencia();
         }
 
@@ -4638,6 +5343,12 @@
         const MINUTOS_ACTIVO = 2;
         let presenciaListenerIniciado = false;
         let intervaloLatido = null;
+        // Expuesta para poder detener el "latido" desde el script clásico (fuera del módulo)
+        // cuando se bloquea la app con el PIN — un <script type="module"> no comparte alcance
+        // con el resto, así que sin esto el intervalo seguiría corriendo en segundo plano.
+        window.detenerLatidoPresencia = function () {
+            if (intervaloLatido) { clearInterval(intervaloLatido); intervaloLatido = null; }
+        };
 
         function idDispositivo() {
             let id = localStorage.getItem('agua_dispositivo_id');
@@ -4646,11 +5357,10 @@
         }
 
         async function enviarLatidoPresencia() {
-            const user = auth.currentUser;
-            if (!user) return;
+            if (!auth.currentUser) return; // aún no autenticado con la nube (sin señal); se reintenta solo
             try {
                 await setDoc(doc(db, 'presencia', idDispositivo()), {
-                    email: user.email,
+                    email: obtenerNombrePromotor() || 'Promotor',
                     ultimaConexion: serverTimestamp()
                 }, { merge: true });
             } catch (e) { /* Sin internet: no pasa nada, se reintenta en el próximo latido. */ }
@@ -4803,6 +5513,23 @@
         // apuntando a un valor específico. Se usa después de renumerar todos los recibos
         // existentes, para que el siguiente recibo continúe la secuencia sin repetirse.
         window.actualizarContadorRecibos = (valor) => setDoc(doc(db, 'contadores', 'recibos'), { valor }, { merge: true });
+
+        // Sincroniza a la nube el día configurado como "fecha límite de pago" (mostrado en los
+        // recibos). Se guarda en 'configuracion/general' junto a cualquier otro ajuste futuro.
+        window.syncFechaLimitePago = (dia) => setDoc(doc(db, 'configuracion', 'general'), { fechaLimitePagoDia: dia, actualizadoEn: serverTimestamp() }, { merge: true });
+
+        // Bloqueo/desbloqueo remoto de seguridad: escribe directo en 'configuracion/general' en
+        // la nube, y TODOS los dispositivos con señal lo aplican de inmediato (ver el listener
+        // en iniciarListenersNube). Requiere estar en línea para poder enviarlo — si necesitas
+        // bloquear la app y este celular no tiene señal, hazlo desde Firebase Console
+        // (Firestore Database → Datos → configuracion → general → bloqueadaRemota: true) o desde
+        // cualquier otro dispositivo con la app y la contraseña de Administrador.
+        window.aplicarBloqueoRemotoNube = (bloqueada, motivo) =>
+            setDoc(doc(db, 'configuracion', 'general'), {
+                bloqueadaRemota: !!bloqueada,
+                motivoBloqueo: motivo || '',
+                actualizadoEn: serverTimestamp()
+            }, { merge: true });
 
         // N° de recibo: SIEMPRE instantáneo y local (nunca se espera a Firestore aquí, para no
         // atrasar al cajero). En segundo plano, si hay señal, se intenta alinear el contador de
@@ -5036,19 +5763,17 @@
             alert('✅ ' + nuevos + ' cobros enviados a Caja Chica.' + (nuevos < contabilidad.length ? ' (' + (contabilidad.length - nuevos) + ' ya estaban.)' : ''));
         };
 
-        // ---------- ESTADO DE SESIÓN ----------
+        // ---------- ESTADO DE AUTENTICACIÓN CON LA NUBE (invisible para la persona) ----------
+        // Ya NO controla si se muestra la app (eso lo decide únicamente el PIN, ver
+        // desbloquearApp/mostrarPantallaPin arriba). Solo arranca la sincronización en cuanto
+        // hay una sesión anónima activa, sin tocar la pantalla de login/PIN.
         onAuthStateChanged(auth, (user) => {
-            const login = document.getElementById('login-screen');
-            const app = document.getElementById('app-content');
+            const infoEl = document.getElementById('sync-usuario-actual');
             if (user) {
-                login.style.display = 'none';
-                app.style.display = 'block';
-                const infoEl = document.getElementById('sync-usuario-actual');
-                if (infoEl) infoEl.innerText = 'Sesión: ' + user.email;
+                if (infoEl) infoEl.innerText = obtenerNombrePromotor() ? ('Conectado como: ' + obtenerNombrePromotor()) : 'Conectado';
                 iniciarListenersNube();
             } else {
-                login.style.display = 'flex';
-                app.style.display = 'none';
+                if (infoEl) infoEl.innerText = 'Sin conexión con la nube';
             }
         });
 
