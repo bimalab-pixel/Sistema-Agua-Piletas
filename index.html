@@ -257,10 +257,14 @@
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:2.8rem;">💧</div>
             <h2 style="margin:5px 0 0; color:var(--primary-dark);">ACOMAACAP</h2>
-            <p style="margin:5px 0 0; color:#666; font-size:0.85rem;">Ingresa el PIN para continuar</p>
+            <p id="login-subtitulo" style="margin:5px 0 0; color:#666; font-size:0.85rem;">Ingresa el PIN para continuar</p>
         </div>
         <label>PIN</label>
         <input type="password" id="login-pin" inputmode="numeric" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter') desbloquearApp();">
+        <div id="login-pin-confirmar-wrap" style="display:none;">
+            <label>Confirmar PIN</label>
+            <input type="password" id="login-pin-confirmar" inputmode="numeric" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter') desbloquearApp();">
+        </div>
         <div id="login-error" style="color:var(--danger); font-size:0.85rem; margin:-10px 0 15px; display:none;"></div>
         <button class="btn btn-primary" id="btn-login" onclick="desbloquearApp()">🔓 Entrar</button>
     </div>
@@ -1300,13 +1304,16 @@
         // guardado en este dispositivo. Se desbloquea UNA vez y queda recordado permanentemente
         // (localStorage, no sessionStorage), sin importar que la dirección/puerto local cambie
         // entre aperturas — por eso ya no depende de que Firebase "recuerde" la sesión.
-        const APP_PIN_DEFAULT = '2026';
+        //
+        // Ya NO hay PIN de fábrica: la primera vez que se abre la app en un dispositivo (no
+        // existe APP_PIN_STORAGE_KEY todavía), esta misma pantalla cambia a modo "crear PIN"
+        // (pide el PIN dos veces para confirmarlo) en vez de "ingresar PIN".
         const APP_PIN_STORAGE_KEY = 'acomaacap_app_pin';
         const APP_PIN_UNLOCKED_KEY = 'acomaacap_app_desbloqueada';
         const NOMBRE_PROMOTOR_KEY = 'acomaacap_nombre_promotor';
 
         function obtenerPinApp() {
-            return localStorage.getItem(APP_PIN_STORAGE_KEY) || APP_PIN_DEFAULT;
+            return localStorage.getItem(APP_PIN_STORAGE_KEY) || null;
         }
 
         function appDesbloqueada() {
@@ -1326,29 +1333,61 @@
             localStorage.setItem(NOMBRE_PROMOTOR_KEY, nombre.trim());
         }
 
+        function entrarALaApp() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-content').style.display = 'block';
+            pedirNombrePromotorSiFalta();
+            if (typeof iniciarPresencia === 'function') iniciarPresencia();
+        }
+
+        // Prepara los textos/campos de la pantalla según haga falta CREAR el PIN (primera vez
+        // en este dispositivo) o solo INGRESARLO (ya existe uno guardado).
+        function prepararPantallaLogin() {
+            const modoCrear = !obtenerPinApp();
+            document.getElementById('login-subtitulo').innerText = modoCrear
+                ? 'Primera vez en este dispositivo: crea tu PIN de acceso'
+                : 'Ingresa el PIN para continuar';
+            document.getElementById('login-pin-confirmar-wrap').style.display = modoCrear ? 'block' : 'none';
+            document.getElementById('btn-login').innerText = modoCrear ? '✅ Crear PIN y entrar' : '🔓 Entrar';
+        }
+
         function mostrarPantallaPin(mensaje) {
             const pantalla = document.getElementById('login-screen');
             const app = document.getElementById('app-content');
             if (app) app.style.display = 'none';
             if (pantalla) pantalla.style.display = 'flex';
+            prepararPantallaLogin();
             const err = document.getElementById('login-error');
             if (err) { err.style.display = mensaje ? 'block' : 'none'; if (mensaje) err.innerText = mensaje; }
             const input = document.getElementById('login-pin');
+            const inputConf = document.getElementById('login-pin-confirmar');
             if (input) { input.value = ''; setTimeout(() => input.focus(), 100); }
+            if (inputConf) inputConf.value = '';
         }
 
         window.desbloquearApp = function () {
-            const input = document.getElementById('login-pin');
-            const pin = input.value.trim();
+            const pin = document.getElementById('login-pin').value.trim();
             const errBox = document.getElementById('login-error');
             errBox.style.display = 'none';
+            const pinGuardado = obtenerPinApp();
+
+            if (!pinGuardado) {
+                // Modo "crear PIN" (primera vez en este dispositivo)
+                const confirmarPin = document.getElementById('login-pin-confirmar').value.trim();
+                if (!pin || pin.length < 4) { errBox.innerText = 'El PIN debe tener al menos 4 caracteres.'; errBox.style.display = 'block'; return; }
+                if (pin !== confirmarPin) { errBox.innerText = '❌ El PIN y su confirmación no coinciden.'; errBox.style.display = 'block'; return; }
+                localStorage.setItem(APP_PIN_STORAGE_KEY, pin);
+                localStorage.setItem(APP_PIN_UNLOCKED_KEY, '1');
+                alert('✅ PIN creado. Anótalo en un lugar seguro — si lo olvidas, la única forma de recuperarlo es borrar los datos de la app en este dispositivo.');
+                entrarALaApp();
+                return;
+            }
+
+            // Modo normal: verificar PIN existente
             if (!pin) { errBox.innerText = 'Ingresa el PIN.'; errBox.style.display = 'block'; return; }
-            if (pin !== obtenerPinApp()) { errBox.innerText = '❌ PIN incorrecto.'; errBox.style.display = 'block'; return; }
+            if (pin !== pinGuardado) { errBox.innerText = '❌ PIN incorrecto.'; errBox.style.display = 'block'; return; }
             localStorage.setItem(APP_PIN_UNLOCKED_KEY, '1');
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('app-content').style.display = 'block';
-            pedirNombrePromotorSiFalta();
-            if (typeof iniciarPresencia === 'function') iniciarPresencia();
+            entrarALaApp();
         };
 
         window.bloquearApp = function () {
