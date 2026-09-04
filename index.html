@@ -279,7 +279,8 @@
         <p style="color:#444; font-size:0.9rem; margin:0 0 6px;">Un administrador bloqueó el acceso a esta app por seguridad.</p>
         <p id="bloqueo-remoto-motivo" style="color:#666; font-size:0.85rem; font-style:italic; margin:10px 0 0;"></p>
         <p style="color:#999; font-size:0.75rem; margin-top:16px;">Contacta al administrador para más información.</p>
-        <button class="btn btn-outline" style="margin-top:16px; font-size:0.8rem;" onclick="intentarDesbloqueoRemotoDesdePantalla()">🔑 Soy Administrador, quitar bloqueo</button>
+        <button class="btn btn-outline" style="margin-top:16px; font-size:0.8rem;" onclick="entrarComoAdminDuranteBloqueo()">👤 Soy Administrador, usar la app de todos modos</button>
+        <button class="btn btn-outline" style="margin-top:8px; font-size:0.8rem;" onclick="intentarDesbloqueoRemotoDesdePantalla()">🔑 Soy Administrador, quitar bloqueo para todos</button>
     </div>
 </div>
 
@@ -1435,14 +1436,25 @@
         // de Firestore (ver iniciarListenersNube en el módulo de abajo); esto es solo el respaldo
         // para cuando la app abre offline.
         const BLOQUEO_REMOTO_CACHE_KEY = 'acomaacap_bloqueo_remoto_cache';
+        // Guarda el "id" del bloqueo (bloqueoId) para el que ESTE dispositivo quedó exento como
+        // Administrador. Se compara contra el bloqueoId vigente: si coincide, este dispositivo
+        // entra normal aunque el bloqueo siga activo para todos los demás. Si el administrador
+        // activa un bloqueo NUEVO más adelante, el bloqueoId cambia y hay que volver a autorizar
+        // — la exención nunca queda "olvidada" funcionando para siempre.
+        const BYPASS_ADMIN_BLOQUEO_KEY = 'acomaacap_bypass_admin_bloqueo_id';
 
         function leerBloqueoRemotoCache() {
             try { return JSON.parse(localStorage.getItem(BLOQUEO_REMOTO_CACHE_KEY) || 'null'); }
             catch (e) { return null; }
         }
 
-        function guardarBloqueoRemotoCache(bloqueada, motivo) {
-            localStorage.setItem(BLOQUEO_REMOTO_CACHE_KEY, JSON.stringify({ bloqueada: !!bloqueada, motivo: motivo || '' }));
+        function guardarBloqueoRemotoCache(bloqueada, motivo, bloqueoId) {
+            localStorage.setItem(BLOQUEO_REMOTO_CACHE_KEY, JSON.stringify({ bloqueada: !!bloqueada, motivo: motivo || '', bloqueoId: bloqueoId || null }));
+        }
+
+        function tieneExencionAdminVigente(bloqueoId) {
+            if (!bloqueoId) return false;
+            return localStorage.getItem(BYPASS_ADMIN_BLOQUEO_KEY) === String(bloqueoId);
         }
 
         function mostrarPantallaBloqueoRemoto(motivo) {
@@ -1455,13 +1467,14 @@
 
         // Llamada tanto al abrir la app (con el caché) como en tiempo real (desde el listener
         // de Firestore) cada vez que cambia el estado de bloqueo.
-        function aplicarEstadoBloqueoRemoto(bloqueada, motivo) {
-            guardarBloqueoRemotoCache(bloqueada, motivo);
-            if (bloqueada) {
+        function aplicarEstadoBloqueoRemoto(bloqueada, motivo, bloqueoId) {
+            guardarBloqueoRemotoCache(bloqueada, motivo, bloqueoId);
+            if (bloqueada && !tieneExencionAdminVigente(bloqueoId)) {
                 mostrarPantallaBloqueoRemoto(motivo);
             } else {
-                // Se desbloqueó: solo oculta la pantalla de bloqueo. Vuelve al estado normal
-                // (PIN o app, según corresponda) sin forzar nada extra.
+                // Se desbloqueó (o este dispositivo tiene exención de Administrador vigente
+                // para este bloqueo): oculta la pantalla de bloqueo y vuelve al estado normal
+                // (PIN o app, según corresponda).
                 document.getElementById('pantalla-bloqueo-remoto').style.display = 'none';
                 if (appDesbloqueada()) {
                     document.getElementById('app-content').style.display = 'block';
@@ -1471,6 +1484,31 @@
             }
         }
         window.aplicarEstadoBloqueoRemoto = aplicarEstadoBloqueoRemoto;
+
+        // Botón de la pantalla de bloqueo: "Soy Administrador, usar la app de todos modos".
+        // A diferencia de intentarDesbloqueoRemotoDesdePantalla(), esto NO quita el bloqueo para
+        // los demás — solo exime a ESTE dispositivo, mientras el resto sigue bloqueado. No
+        // requiere señal (la contraseña se valida localmente), así que funciona incluso offline.
+        function entrarComoAdminDuranteBloqueo() {
+            const clave = prompt('🔑 Contraseña de Administrador:');
+            if (clave === null) return;
+            if (clave !== obtenerPasswordAdmin()) { alert('❌ Contraseña incorrecta.'); return; }
+            const cache = leerBloqueoRemotoCache();
+            const bloqueoId = cache ? cache.bloqueoId : null;
+            if (!bloqueoId) {
+                alert('⚠️ No se pudo identificar este bloqueo (sin señal la primera vez). Conéctate a internet una vez y vuelve a intentar.');
+                return;
+            }
+            localStorage.setItem(BYPASS_ADMIN_BLOQUEO_KEY, String(bloqueoId));
+            sessionStorage.setItem('admin_unlocked', '1'); // de paso, ya queda con acceso de Admin en esta sesión
+            document.getElementById('pantalla-bloqueo-remoto').style.display = 'none';
+            if (appDesbloqueada()) {
+                document.getElementById('app-content').style.display = 'block';
+                if (typeof iniciarPresencia === 'function') iniciarPresencia();
+            } else {
+                mostrarPantallaPin();
+            }
+        }
         // ============================================================
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -1479,9 +1517,10 @@
             if (inputFechaLimite) inputFechaLimite.value = obtenerFechaLimitePagoDia();
 
             // Bloqueo remoto: si el último estado conocido (aunque sea offline) era "bloqueada",
-            // no dejamos ni ver el PIN.
+            // no dejamos ni ver el PIN — salvo que este dispositivo ya tenga exención de
+            // Administrador vigente para ese mismo bloqueo (ver entrarComoAdminDuranteBloqueo).
             const cacheBloqueo = leerBloqueoRemotoCache();
-            if (cacheBloqueo && cacheBloqueo.bloqueada) {
+            if (cacheBloqueo && cacheBloqueo.bloqueada && !tieneExencionAdminVigente(cacheBloqueo.bloqueoId)) {
                 mostrarPantallaBloqueoRemoto(cacheBloqueo.motivo);
                 return;
             }
@@ -5210,26 +5249,59 @@
             setSyncText('📴 Sin conexión (modo local)', 'offline');
         }
 
-        // "Vigilante" de arranque: si tras 6 segundos seguimos sin poder autenticar con la nube
-        // (por falta de señal), lo indicamos en el punto de estado — pero esto YA NO bloquea el
-        // uso de la app: con el PIN local, la persona entra y trabaja offline igual, y la
-        // sincronización se pone al día sola en cuanto haya señal.
+        // "Vigilante" de arranque: si tras varios segundos seguimos sin poder autenticar con la
+        // nube, mostramos por qué en pantalla — ya sea "sin señal" (si de verdad no hay conexión)
+        // o el error real de Firebase (si SÍ hay señal pero algo específico está fallando, p.ej.
+        // dominio no autorizado, configuración incorrecta, etc.). Esto YA NO bloquea el uso de
+        // la app: con el PIN local, la persona entra y trabaja offline igual, y la sincronización
+        // se pone al día sola en cuanto se resuelva lo que esté fallando.
+        let ultimoErrorAuth = null;
         setTimeout(() => {
-            if (!auth.currentUser && typeof navigator !== 'undefined' && navigator.onLine === false) {
+            if (auth.currentUser) return; // ya autenticado, todo bien
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
                 setSyncText('📴 Sin conexión (modo local)', 'offline');
+            } else if (ultimoErrorAuth) {
+                // Hay señal, pero Firebase rechazó la conexión: mostramos el código de error
+                // real en vez de dejarlo pegado en "Conectando..." sin explicación.
+                setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error');
+            } else {
+                setSyncText('🔴 No se pudo conectar (sin respuesta). Toca aquí para más detalle.', 'error');
             }
-        }, 6000);
+        }, 8000);
+
+        // Toca el punto de estado para ver el detalle completo del error (útil para reportarlo).
+        function mostrarDetalleConexion() {
+            const detalle = ultimoErrorAuth
+                ? ('Código de error de Firebase: ' + ultimoErrorAuth)
+                : 'Sin señal, o aún esperando respuesta de la nube.';
+            alert('🔎 Estado de conexión con la nube\n\n' + detalle + '\n\nOrigen actual: ' + window.location.origin + window.location.pathname + '\n\nSi el problema persiste, comparte este mensaje completo.');
+        }
+        ['sync-status', 'sync-status-detalle', 'sync-dot', 'sync-dot-detalle'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.style.cursor = 'pointer'; el.onclick = mostrarDetalleConexion; }
+        });
 
         // ---------- AUTENTICACIÓN ANÓNIMA SILENCIOSA ----------
         // La app ya NO pide correo/contraseña: el acceso lo controla el PIN local (ver el
         // <script> de arriba, función desbloquearApp/mostrarPantallaPin). Pero las reglas de
         // Firestore exigen "request.auth != null" para poder leer/escribir, así que aquí, por
         // debajo y sin que la persona vea nada, se autentica de forma anónima. Si falla (sin
-        // señal), se reintenta solo al recuperar conexión — la app sigue funcionando offline
+        // señal, o por cualquier otro motivo), se guarda el error para poder mostrarlo (ver
+        // arriba) y se reintenta solo al recuperar conexión — la app sigue funcionando offline
         // con los datos locales mientras tanto.
         function autenticarAnonimoSilencioso() {
             if (auth.currentUser) return;
-            signInAnonymously(auth).catch(e => console.error('No se pudo autenticar con la nube (revisa la señal):', e));
+            signInAnonymously(auth)
+                .then(() => { ultimoErrorAuth = null; })
+                .catch(e => {
+                    ultimoErrorAuth = (e && e.code) ? e.code : 'error desconocido';
+                    console.error('No se pudo autenticar con la nube:', e);
+                    // Si ya pasó el tiempo de espera inicial, refleja el error de inmediato
+                    // (no solo la primera vez) en vez de esperar a que alguien reabra la app.
+                    if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+                        setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error');
+                    }
+                });
         }
         autenticarAnonimoSilencioso();
         window.addEventListener('online', autenticarAnonimoSilencioso);
@@ -5330,7 +5402,7 @@
                 // Bloqueo remoto: se aplica en tiempo real, incluso si la app ya está abierta
                 // (saca a la persona de inmediato en cuanto llega la orden de bloqueo).
                 if (typeof window.aplicarEstadoBloqueoRemoto === 'function') {
-                    window.aplicarEstadoBloqueoRemoto(!!data.bloqueadaRemota, data.motivoBloqueo || '');
+                    window.aplicarEstadoBloqueoRemoto(!!data.bloqueadaRemota, data.motivoBloqueo || '', data.bloqueoId || null);
                 }
             }, err => console.error('Error escuchando configuración general:', err));
 
@@ -5528,6 +5600,11 @@
             setDoc(doc(db, 'configuracion', 'general'), {
                 bloqueadaRemota: !!bloqueada,
                 motivoBloqueo: motivo || '',
+                // Nuevo "id" cada vez que se ACTIVA un bloqueo (nunca al desactivar), para poder
+                // distinguir "este mismo bloqueo de siempre" de "un bloqueo nuevo" — así, una
+                // exención de Administrador otorgada para un bloqueo anterior no sirve para uno
+                // nuevo sin volver a autorizarla.
+                ...(bloqueada ? { bloqueoId: Date.now() } : {}),
                 actualizadoEn: serverTimestamp()
             }, { merge: true });
 
