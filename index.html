@@ -443,6 +443,14 @@
 <!-- ===== CONTENIDO DE LA APP (oculto hasta iniciar sesión) ===== -->
 <div id="app-content" style="display:none;">
 
+<!-- ===== AVISO DE NUEVA VERSIÓN DISPONIBLE ===== -->
+<!-- Se muestra cuando la nube indica una versión distinta a APP_VERSION. NO actualiza nada
+     solo: es un aviso para que la persona sepa que debe instalar el archivo/APK nuevo a mano.
+     Se puede cerrar (queda oculto hasta que se publique una versión más nueva todavía). -->
+<div id="banner-nueva-version" style="display:none; background:#fff3cd; border-bottom:2px solid #f0ad4e; padding:10px 14px; text-align:center; position:relative;">
+    <span style="font-size:0.85rem; color:#664d03;">🆕 <b>Hay una nueva versión disponible</b> — <span id="banner-version-texto"></span></span>
+    <button onclick="cerrarAvisoVersion()" style="position:absolute; right:10px; top:8px; background:none; border:none; font-size:1rem; cursor:pointer; color:#664d03;">✖️</button>
+</div>
 
 <header>
     <button id="btn-atras" class="btn-nav-flotante" onclick="irAtras()" title="Atrás">⬅️</button>
@@ -1170,6 +1178,14 @@
                 <button class="btn btn-danger" onclick="activarBloqueoRemoto()">🚫 Bloquear TODOS los dispositivos</button>
                 <button class="btn btn-outline" style="margin-top:8px;" onclick="desactivarBloqueoRemoto()">✅ Quitar bloqueo remoto</button>
             </div>
+            <div class="card" style="text-align:center; margin-top:15px; border:2px solid #f0ad4e;">
+                <h4 style="margin:0 0 8px 0; color:#8a6d00;">📢 Aviso de nueva versión</h4>
+                <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
+                    Versión actual de este archivo: <b id="ajustes-app-version">–</b>. Publica un aviso para que todos los dispositivos sepan que hay una actualización — no la instala sola, solo avisa. Requiere señal y contraseña de Administrador.
+                </p>
+                <button class="btn btn-primary" onclick="avisarNuevaVersion()">📢 Avisar nueva versión</button>
+                <button class="btn btn-outline" style="margin-top:8px;" onclick="quitarAvisoNuevaVersion()">✖️ Quitar aviso</button>
+            </div>
             <div class="card card-green" style="text-align:center; margin-top:15px;">
                 <h4 style="margin:0 0 8px 0;">📦 Enviar Cobros Antiguos a Caja</h4>
                 <p style="margin:0 0 10px; font-size:0.8rem; color:#666;">
@@ -1442,6 +1458,71 @@
                 .then(() => alert('✅ Desbloqueo enviado.'))
                 .catch(e => alert('❌ No se pudo enviar el desbloqueo: ' + e.message));
         }
+        // ============================================================
+
+        // ============ AVISO DE NUEVA VERSIÓN DISPONIBLE ============
+        // No actualiza nada automáticamente (un APK o un archivo HTML suelto no se pueden
+        // autoactualizar solos) — solo avisa, en todos los dispositivos conectados, que hay una
+        // versión más nueva y que hay que instalarla a mano. Se guarda en el mismo documento de
+        // Firestore que el bloqueo remoto ('configuracion/general').
+        window._ultimaVersionNubeActual = null;
+
+        // Llamada desde el listener en tiempo real (ver iniciarListenersNube en el módulo).
+        window.evaluarAvisoNuevaVersion = function (versionNube, nota) {
+            const banner = document.getElementById('banner-nueva-version');
+            if (!banner) return;
+            window._ultimaVersionNubeActual = versionNube;
+            const yaVista = localStorage.getItem('acomaacap_version_vista');
+            if (!versionNube || versionNube === window.APP_VERSION || versionNube === yaVista) {
+                banner.style.display = 'none';
+                return;
+            }
+            document.getElementById('banner-version-texto').innerText =
+                'Versión ' + versionNube + (nota ? (' — ' + nota) : '') + ' (esta app tiene ' + window.APP_VERSION + ')';
+            banner.style.display = 'block';
+        };
+
+        // Botón "✖️" del banner: lo oculta y recuerda que ya se vio ESTA versión (si se publica
+        // una más nueva todavía, vuelve a aparecer).
+        function cerrarAvisoVersion() {
+            if (window._ultimaVersionNubeActual) localStorage.setItem('acomaacap_version_vista', window._ultimaVersionNubeActual);
+            const banner = document.getElementById('banner-nueva-version');
+            if (banner) banner.style.display = 'none';
+        }
+
+        // Desde Ajustes: el administrador publica el aviso para todos los dispositivos.
+        function avisarNuevaVersion() {
+            const claveGuardada = obtenerPasswordAdmin();
+            if (!claveGuardada) { alert('⚠️ Primero debes crear la contraseña de Administrador (abre "🏦 Caja" o "⚙️ Ajustes" una vez para crearla).'); return; }
+            const clave = prompt('🔒 Contraseña de Administrador:');
+            if (clave === null) return;
+            if (clave !== claveGuardada) { alert('❌ Contraseña incorrecta.'); return; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                alert('📴 Sin conexión ahora mismo. El aviso no se puede enviar sin señal.');
+                return;
+            }
+            const version = prompt('Número/nombre de la nueva versión (ej. "v10"):');
+            if (version === null || !version.trim()) return;
+            const nota = prompt('Nota o instrucción para quien la reciba (opcional, ej. "Descárgala del enlace de siempre"):') || '';
+            if (typeof window.publicarNuevaVersionNube !== 'function') { alert('❌ No disponible.'); return; }
+            window.publicarNuevaVersionNube(version.trim(), nota)
+                .then(() => alert('📢 Aviso enviado. Los demás dispositivos lo verán en cuanto tengan señal.'))
+                .catch(e => alert('❌ No se pudo enviar el aviso: ' + e.message));
+        }
+
+        // Quita el aviso para todos (por ejemplo, si te equivocaste al publicarlo).
+        function quitarAvisoNuevaVersion() {
+            const claveGuardada = obtenerPasswordAdmin();
+            if (!claveGuardada) { alert('⚠️ Primero debes crear la contraseña de Administrador.'); return; }
+            const clave = prompt('🔒 Contraseña de Administrador:');
+            if (clave === null) return;
+            if (clave !== claveGuardada) { alert('❌ Contraseña incorrecta.'); return; }
+            if (typeof window.publicarNuevaVersionNube !== 'function') { alert('❌ No disponible.'); return; }
+            window.publicarNuevaVersionNube(null, '')
+                .then(() => alert('✅ Aviso quitado.'))
+                .catch(e => alert('❌ No se pudo quitar el aviso: ' + e.message));
+        }
+        // ============================================================
 
         // Igual que desactivarBloqueoRemoto(), pero utilizable DESDE la propia pantalla de
         // bloqueo (que no tiene acceso a Ajustes ni a ningún otro botón de la app). Así, el
@@ -1554,6 +1635,8 @@
             cargarFiltrosFecha(); actualizarDashboard(); cargarSelectUsuarios();
             const inputFechaLimite = document.getElementById('input-fecha-limite-pago');
             if (inputFechaLimite) inputFechaLimite.value = obtenerFechaLimitePagoDia();
+            const versionEl = document.getElementById('ajustes-app-version');
+            if (versionEl) versionEl.innerText = window.APP_VERSION || '?';
 
             // Bloqueo remoto: si el último estado conocido (aunque sea offline) era "bloqueada",
             // no dejamos ni ver el PIN — salvo que este dispositivo ya tenga exención de
@@ -5218,6 +5301,12 @@
             collection, doc, setDoc, deleteDoc, onSnapshot, runTransaction, serverTimestamp, writeBatch
         } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
+        // Versión de ESTE archivo. Súbela (ej. "v10", "v11"...) cada vez que publiques una
+        // actualización real del código, y usa "📢 Avisar nueva versión" en Ajustes para que
+        // todos los dispositivos vean el aviso. No se autoactualiza sola: solo avisa.
+        const APP_VERSION = 'v9';
+        window.APP_VERSION = APP_VERSION;
+
         const firebaseConfig = {
             apiKey: "AIzaSyDeMlSIltDHNz2-l-cgDkDLpYa6ZX6kL4Q",
             authDomain: "sistema-de-agua-acomaacap.firebaseapp.com",
@@ -5310,9 +5399,16 @@
 
         // Toca el punto de estado para ver el detalle completo del error (útil para reportarlo).
         function mostrarDetalleConexion() {
-            const detalle = ultimoErrorAuth
-                ? ('Código de error de Firebase: ' + ultimoErrorAuth)
-                : 'Sin señal, o aún esperando respuesta de la nube.';
+            let detalle;
+            if (auth.currentUser) {
+                detalle = '✅ Conectado correctamente con la nube.';
+            } else if (ultimoErrorAuth) {
+                detalle = 'Código de error de Firebase: ' + ultimoErrorAuth;
+            } else if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                detalle = '📴 Sin señal en este momento.';
+            } else {
+                detalle = 'Aún esperando respuesta de la nube (puede tardar unos segundos al abrir la app).';
+            }
             alert('🔎 Estado de conexión con la nube\n\n' + detalle + '\n\nOrigen actual: ' + window.location.origin + window.location.pathname + '\n\nSi el problema persiste, comparte este mensaje completo.');
         }
         ['sync-status', 'sync-status-detalle', 'sync-dot', 'sync-dot-detalle'].forEach(id => {
@@ -5442,6 +5538,12 @@
                 // (saca a la persona de inmediato en cuanto llega la orden de bloqueo).
                 if (typeof window.aplicarEstadoBloqueoRemoto === 'function') {
                     window.aplicarEstadoBloqueoRemoto(!!data.bloqueadaRemota, data.motivoBloqueo || '', data.bloqueoId || null);
+                }
+                // Aviso de nueva versión: si la nube indica una versión distinta a la de este
+                // archivo, y la persona no la cerró ya para esa misma versión, se muestra el
+                // banner. No descarga ni instala nada solo — solo avisa.
+                if (typeof window.evaluarAvisoNuevaVersion === 'function') {
+                    window.evaluarAvisoNuevaVersion(data.ultimaVersionDisponible || null, data.notaVersion || '');
                 }
             }, err => console.error('Error escuchando configuración general:', err));
 
@@ -5644,6 +5746,16 @@
                 // exención de Administrador otorgada para un bloqueo anterior no sirve para uno
                 // nuevo sin volver a autorizarla.
                 ...(bloqueada ? { bloqueoId: Date.now() } : {}),
+                actualizadoEn: serverTimestamp()
+            }, { merge: true });
+
+        // Publica (o quita, si version es null) el aviso de nueva versión disponible para todos
+        // los dispositivos. Ver window.evaluarAvisoNuevaVersion (script clásico) para cómo se
+        // muestra en pantalla.
+        window.publicarNuevaVersionNube = (version, nota) =>
+            setDoc(doc(db, 'configuracion', 'general'), {
+                ultimaVersionDisponible: version || null,
+                notaVersion: nota || '',
                 actualizadoEn: serverTimestamp()
             }, { merge: true });
 
