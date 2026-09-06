@@ -5304,7 +5304,7 @@
         // Versión de ESTE archivo. Súbela (ej. "v10", "v11"...) cada vez que publiques una
         // actualización real del código, y usa "📢 Avisar nueva versión" en Ajustes para que
         // todos los dispositivos vean el aviso. No se autoactualiza sola: solo avisa.
-        const APP_VERSION = 'v3';
+        const APP_VERSION = 'v9';
         window.APP_VERSION = APP_VERSION;
 
         const firebaseConfig = {
@@ -5385,10 +5385,17 @@
         // se pone al día sola en cuanto se resuelva lo que esté fallando.
         let ultimoErrorAuth = null;
         setTimeout(() => {
-            if (auth.currentUser) return; // ya autenticado, todo bien
+            // OJO: auth.currentUser puede seguir "lleno" (sesión anónima guardada de una vez
+            // anterior con señal) aunque AHORA MISMO no haya conexión real — tener una sesión
+            // guardada no es lo mismo que estar conectado en este momento. Por eso primero se
+            // revisa navigator.onLine (el estado real de la red), sin importar si ya hay una
+            // sesión en caché.
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
                 setSyncText('📴 Sin conexión (modo local)', 'offline');
-            } else if (ultimoErrorAuth) {
+                return;
+            }
+            if (auth.currentUser) return; // hay señal Y ya está autenticado: todo bien
+            if (ultimoErrorAuth) {
                 // Hay señal, pero Firebase rechazó la conexión: mostramos el código de error
                 // real en vez de dejarlo pegado en "Conectando..." sin explicación.
                 setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error');
@@ -5400,12 +5407,15 @@
         // Toca el punto de estado para ver el detalle completo del error (útil para reportarlo).
         function mostrarDetalleConexion() {
             let detalle;
-            if (auth.currentUser) {
+            // Igual que en el vigilante de arranque: revisar primero si hay señal REAL ahora
+            // mismo, sin dejarse engañar por una sesión anónima que quedó guardada de una
+            // conexión anterior (auth.currentUser no implica conexión en este momento).
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                detalle = '📴 Sin señal en este momento (modo local — los datos guardados siguen funcionando normal).';
+            } else if (auth.currentUser) {
                 detalle = '✅ Conectado correctamente con la nube.';
             } else if (ultimoErrorAuth) {
                 detalle = 'Código de error de Firebase: ' + ultimoErrorAuth;
-            } else if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                detalle = '📴 Sin señal en este momento.';
             } else {
                 detalle = 'Aún esperando respuesta de la nube (puede tardar unos segundos al abrir la app).';
             }
@@ -5431,10 +5441,11 @@
                 .catch(e => {
                     ultimoErrorAuth = (e && e.code) ? e.code : 'error desconocido';
                     console.error('No se pudo autenticar con la nube:', e);
-                    // Si ya pasó el tiempo de espera inicial, refleja el error de inmediato
-                    // (no solo la primera vez) en vez de esperar a que alguien reabra la app.
+                    // Igual que los eventos offline/online: con el mismo retraso, para que un
+                    // parpadeo de señal (falla instantánea seguida de señal real) no alcance a
+                    // mostrarse como un error suelto antes de que todo se resuelva solo.
                     if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
-                        setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error');
+                        actualizarEstadoConexionConRetraso(() => setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error'), 1500);
                     }
                 });
         }
@@ -5473,7 +5484,7 @@
             listenersIniciados = true;
 
             let primeraCargaUsuarios = true;
-            onSnapshot(collection(db, 'usuarios'), (snap) => {
+            onSnapshot(collection(db, 'usuarios'), { includeMetadataChanges: true }, (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
                     if (ch.type === 'removed') removeLocal(usuarios, id);
@@ -5481,7 +5492,13 @@
                 });
                 localStorage.setItem('agua_usuarios', JSON.stringify(usuarios));
                 if (typeof renderizarUsuariosCaserio === 'function' && caserioSeleccionado) renderizarUsuariosCaserio();
-                setSyncText('🟢 Sincronizado', 'synced');
+                // Firestore entrega estos datos INSTANTÁNEO desde la caché local guardada en el
+                // celular, incluso sin señal (modo avión incluido) — eso NO es lo mismo que
+                // haber confirmado con el servidor. Solo marcamos "Sincronizado" cuando el dato
+                // viene realmente de la nube (snap.metadata.fromCache === false); si viene de
+                // caché, no tocamos el punto de estado, para no tapar un aviso de "Sin conexión"
+                // que sea más preciso.
+                if (!snap.metadata.fromCache) setSyncText('🟢 Sincronizado', 'synced');
                 // Solo avisamos cuando el cambio viene de la nube (otro dispositivo), no en la
                 // carga inicial ni cuando el cambio es tu propia escritura aún pendiente de confirmar.
                 if (!primeraCargaUsuarios && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
@@ -5492,7 +5509,7 @@
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
             let primeraCargaRecibos = true;
-            onSnapshot(collection(db, 'recibos'), (snap) => {
+            onSnapshot(collection(db, 'recibos'), { includeMetadataChanges: true }, (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
                     if (ch.type === 'removed') removeLocal(recibos, id);
@@ -5501,7 +5518,7 @@
                 localStorage.setItem('agua_recibos', JSON.stringify(recibos));
                 if (typeof actualizarDashboard === 'function') actualizarDashboard();
                 if (typeof actualizarListaRecibosSiVisible === 'function') actualizarListaRecibosSiVisible();
-                setSyncText('🟢 Sincronizado', 'synced');
+                if (!snap.metadata.fromCache) setSyncText('🟢 Sincronizado', 'synced');
                 if (!primeraCargaRecibos && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
                     destellarSyncDot();
                     mostrarAvisoSync('🟢 Recibo actualizado');
@@ -5510,7 +5527,7 @@
             }, err => { console.error(err); setSyncText('🔴 Error de sincronización', 'error'); });
 
             let primeraCargaContabilidad = true;
-            onSnapshot(collection(db, 'contabilidad'), (snap) => {
+            onSnapshot(collection(db, 'contabilidad'), { includeMetadataChanges: true }, (snap) => {
                 snap.docChanges().forEach(ch => {
                     const id = Number(ch.doc.id);
                     if (ch.type === 'removed') removeLocal(contabilidad, id);
@@ -5518,7 +5535,7 @@
                 });
                 localStorage.setItem('agua_contabilidad', JSON.stringify(contabilidad));
                 if (typeof actualizarResumenContable === 'function') actualizarResumenContable();
-                setSyncText('🟢 Sincronizado', 'synced');
+                if (!snap.metadata.fromCache) setSyncText('🟢 Sincronizado', 'synced');
                 if (!primeraCargaContabilidad && !snap.metadata.hasPendingWrites && snap.docChanges().length > 0) {
                     destellarSyncDot();
                     mostrarAvisoSync('🟢 Contabilidad actualizada');
@@ -6005,8 +6022,36 @@
             }
         });
 
-        window.addEventListener('offline', () => setSyncText('📴 Sin conexión (guardando local)', 'offline'));
-        window.addEventListener('online', () => setSyncText('🔄 Reconectando...', 'connecting'));
+        // En modo avión, Android a veces reporta la señal "prendida y apagada" en ráfagas muy
+        // rápidas (parpadeo real del hardware al buscar red, no un error de la app). Sin esto,
+        // cada parpadeo actualizaba el punto de estado, dando la sensación de que la app se
+        // queda pegada alternando "Conectando.../Reconectando...". Con este pequeño retraso,
+        // solo se actualiza el texto si la señal se mantiene estable un momento — un parpadeo
+        // de milisegundos se cancela solo y no llega a mostrarse.
+        let debounceConexionTimer = null;
+        function actualizarEstadoConexionConRetraso(fn, delayMs) {
+            if (debounceConexionTimer) clearTimeout(debounceConexionTimer);
+            debounceConexionTimer = setTimeout(fn, delayMs);
+        }
+        window.addEventListener('offline', () => {
+            actualizarEstadoConexionConRetraso(() => setSyncText('📴 Sin conexión (guardando local)', 'offline'), 1500);
+        });
+        window.addEventListener('online', () => {
+            actualizarEstadoConexionConRetraso(() => {
+                setSyncText('🔄 Reconectando...', 'connecting');
+                // Verificación de respaldo: normalmente las escuchas de Firestore (más arriba)
+                // confirman solas el "Sincronizado" en cuanto el servidor responde. Pero si eso
+                // tarda o no llega (por ejemplo, con varias pestañas de la app abiertas a la vez
+                // compitiendo por la misma conexión), esto evita que el texto se quede pegado en
+                // "Reconectando..." para siempre: si después de unos segundos ya hay sesión y
+                // señal, confirma "Sincronizado" de todas formas.
+                setTimeout(() => {
+                    if (auth.currentUser && typeof navigator !== 'undefined' && navigator.onLine !== false) {
+                        setSyncText('🟢 Sincronizado', 'synced');
+                    }
+                }, 6000);
+            }, 1500);
+        });
 
         // ===== REGISTRO DEL SERVICE WORKER (PWA) =====
         if ('serviceWorker' in navigator) {
