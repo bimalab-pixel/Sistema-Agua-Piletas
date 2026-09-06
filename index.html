@@ -447,9 +447,9 @@
 <!-- Se muestra cuando la nube indica una versión distinta a APP_VERSION. NO actualiza nada
      solo: es un aviso para que la persona sepa que debe instalar el archivo/APK nuevo a mano.
      Se puede cerrar (queda oculto hasta que se publique una versión más nueva todavía). -->
-<div id="banner-nueva-version" style="display:none; background:#fff3cd; border-bottom:2px solid #f0ad4e; padding:10px 14px; text-align:center; position:relative;">
+<div id="banner-nueva-version" style="display:none; background:#fff3cd; border-bottom:2px solid #f0ad4e; padding:calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; text-align:center; position:relative;">
     <span style="font-size:0.85rem; color:#664d03;">🆕 <b>Hay una nueva versión disponible</b> — <span id="banner-version-texto"></span></span>
-    <button onclick="cerrarAvisoVersion()" style="position:absolute; right:10px; top:8px; background:none; border:none; font-size:1rem; cursor:pointer; color:#664d03;">✖️</button>
+    <button onclick="cerrarAvisoVersion()" style="position:absolute; right:10px; top:calc(8px + env(safe-area-inset-top, 0px)); background:none; border:none; font-size:1rem; cursor:pointer; color:#664d03;">✖️</button>
 </div>
 
 <header>
@@ -5304,7 +5304,7 @@
         // Versión de ESTE archivo. Súbela (ej. "v10", "v11"...) cada vez que publiques una
         // actualización real del código, y usa "📢 Avisar nueva versión" en Ajustes para que
         // todos los dispositivos vean el aviso. No se autoactualiza sola: solo avisa.
-        const APP_VERSION = 'v1';
+        const APP_VERSION = 'v9';
         window.APP_VERSION = APP_VERSION;
 
         const firebaseConfig = {
