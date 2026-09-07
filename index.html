@@ -5304,7 +5304,7 @@
         // Versión de ESTE archivo. Súbela (ej. "v10", "v11"...) cada vez que publiques una
         // actualización real del código, y usa "📢 Avisar nueva versión" en Ajustes para que
         // todos los dispositivos vean el aviso. No se autoactualiza sola: solo avisa.
-        const APP_VERSION = 'v5';
+        const APP_VERSION = 'v9';
         window.APP_VERSION = APP_VERSION;
 
         const firebaseConfig = {
@@ -5383,41 +5383,65 @@
         // dominio no autorizado, configuración incorrecta, etc.). Esto YA NO bloquea el uso de
         // la app: con el PIN local, la persona entra y trabaja offline igual, y la sincronización
         // se pone al día sola en cuanto se resuelva lo que esté fallando.
+        //
+        // OJO: NO usamos navigator.onLine como fuente de verdad. En el WebView simple de Android
+        // (el que usa el APK), navigator.onLine casi siempre reporta "true" aunque el celular
+        // esté en modo avión o sin señal real — es una limitación conocida de Android, no un
+        // error de esta app. Los eventos 'online'/'offline' del navegador tampoco son confiables
+        // ahí. Por eso, en su lugar, se hace una prueba REAL: un pedido pequeñísimo a internet
+        // con tiempo límite corto; si no responde a tiempo, se asume sin conexión de verdad.
         let ultimoErrorAuth = null;
-        setTimeout(() => {
-            // OJO: auth.currentUser puede seguir "lleno" (sesión anónima guardada de una vez
-            // anterior con señal) aunque AHORA MISMO no haya conexión real — tener una sesión
-            // guardada no es lo mismo que estar conectado en este momento. Por eso primero se
-            // revisa navigator.onLine (el estado real de la red), sin importar si ya hay una
-            // sesión en caché.
-            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+
+        function hayConexionReal(timeoutMs) {
+            return new Promise((resolve) => {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => { controller.abort(); resolve(false); }, timeoutMs || 4000);
+                    fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: controller.signal })
+                        .then(() => { clearTimeout(timer); resolve(true); })
+                        .catch(() => { clearTimeout(timer); resolve(false); });
+                } catch (e) { resolve(false); }
+            });
+        }
+
+        // Revisión activa del estado real de conexión — se llama al abrir la app, y de ahí en
+        // adelante cada 20 segundos (en vez de depender de eventos online/offline que en el
+        // WebView del APK no siempre se disparan). Actualiza el punto de estado según lo que
+        // encuentre, y reintenta autenticar si hay señal pero aún no hay sesión.
+        async function revisarConexionReal() {
+            const conectado = await hayConexionReal(4000);
+            if (!conectado) {
                 setSyncText('📴 Sin conexión (modo local)', 'offline');
                 return;
             }
-            if (auth.currentUser) return; // hay señal Y ya está autenticado: todo bien
+            if (auth.currentUser) {
+                setSyncText('🟢 Sincronizado', 'synced');
+                return;
+            }
+            // Hay señal real, pero todavía no hay sesión: intenta autenticar y, si falla,
+            // muestra el motivo real en vez de dejar "Conectando..." sin explicación.
+            autenticarAnonimoSilencioso();
             if (ultimoErrorAuth) {
-                // Hay señal, pero Firebase rechazó la conexión: mostramos el código de error
-                // real en vez de dejarlo pegado en "Conectando..." sin explicación.
                 setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error');
             } else {
-                setSyncText('🔴 No se pudo conectar (sin respuesta). Toca aquí para más detalle.', 'error');
+                setSyncText('🔄 Reconectando...', 'connecting');
             }
-        }, 8000);
+        }
+        setTimeout(revisarConexionReal, 8000);
+        setInterval(revisarConexionReal, 20000);
 
-        // Toca el punto de estado para ver el detalle completo del error (útil para reportarlo).
-        function mostrarDetalleConexion() {
+        // Toca el punto de estado para ver el detalle completo (útil para reportar un problema).
+        async function mostrarDetalleConexion() {
+            const conectado = await hayConexionReal(4000);
             let detalle;
-            // Igual que en el vigilante de arranque: revisar primero si hay señal REAL ahora
-            // mismo, sin dejarse engañar por una sesión anónima que quedó guardada de una
-            // conexión anterior (auth.currentUser no implica conexión en este momento).
-            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                detalle = '📴 Sin señal en este momento (modo local — los datos guardados siguen funcionando normal).';
+            if (!conectado) {
+                detalle = '📴 Sin señal real en este momento (modo local — los datos guardados siguen funcionando normal).';
             } else if (auth.currentUser) {
                 detalle = '✅ Conectado correctamente con la nube.';
             } else if (ultimoErrorAuth) {
-                detalle = 'Código de error de Firebase: ' + ultimoErrorAuth;
+                detalle = 'Hay señal, pero Firebase rechazó la conexión.\nCódigo de error: ' + ultimoErrorAuth;
             } else {
-                detalle = 'Aún esperando respuesta de la nube (puede tardar unos segundos al abrir la app).';
+                detalle = 'Hay señal, pero aún esperando respuesta de la nube (puede tardar unos segundos al abrir la app).';
             }
             alert('🔎 Estado de conexión con la nube\n\n' + detalle + '\n\nOrigen actual: ' + window.location.origin + window.location.pathname + '\n\nSi el problema persiste, comparte este mensaje completo.');
         }
@@ -5432,8 +5456,7 @@
         // Firestore exigen "request.auth != null" para poder leer/escribir, así que aquí, por
         // debajo y sin que la persona vea nada, se autentica de forma anónima. Si falla (sin
         // señal, o por cualquier otro motivo), se guarda el error para poder mostrarlo (ver
-        // arriba) y se reintenta solo al recuperar conexión — la app sigue funcionando offline
-        // con los datos locales mientras tanto.
+        // arriba) — revisarConexionReal() ya se encarga de reintentarlo cada 20 segundos.
         function autenticarAnonimoSilencioso() {
             if (auth.currentUser) return;
             signInAnonymously(auth)
@@ -5441,16 +5464,10 @@
                 .catch(e => {
                     ultimoErrorAuth = (e && e.code) ? e.code : 'error desconocido';
                     console.error('No se pudo autenticar con la nube:', e);
-                    // Igual que los eventos offline/online: con el mismo retraso, para que un
-                    // parpadeo de señal (falla instantánea seguida de señal real) no alcance a
-                    // mostrarse como un error suelto antes de que todo se resuelva solo.
-                    if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
-                        actualizarEstadoConexionConRetraso(() => setSyncText('🔴 Sin conectar: ' + ultimoErrorAuth, 'error'), 1500);
-                    }
                 });
         }
         autenticarAnonimoSilencioso();
-        window.addEventListener('online', autenticarAnonimoSilencioso);
+        window.addEventListener('online', autenticarAnonimoSilencioso); // por si acaso sí se dispara (en navegador normal, suele funcionar bien)
 
         // Da un tiempo límite a una petición: si Firebase no responde (señal falsa,
         // "rayitas" sin datos reales), rechaza con un error de tipo "timeout" en vez de
@@ -6022,35 +6039,21 @@
             }
         });
 
-        // En modo avión, Android a veces reporta la señal "prendida y apagada" en ráfagas muy
-        // rápidas (parpadeo real del hardware al buscar red, no un error de la app). Sin esto,
-        // cada parpadeo actualizaba el punto de estado, dando la sensación de que la app se
-        // queda pegada alternando "Conectando.../Reconectando...". Con este pequeño retraso,
-        // solo se actualiza el texto si la señal se mantiene estable un momento — un parpadeo
-        // de milisegundos se cancela solo y no llega a mostrarse.
+        // En navegadores normales (donde SÍ suelen dispararse bien estos eventos), esto da una
+        // respuesta más rápida que esperar a la revisión periódica de 20 segundos. Con el mismo
+        // pequeño retraso de antes, para ignorar parpadeos rápidos de señal. En el WebView del
+        // APK, si estos eventos no llegan a dispararse, no pasa nada — revisarConexionReal() ya
+        // cubre ese caso de forma activa cada 20 segundos, sin depender de ellos.
         let debounceConexionTimer = null;
         function actualizarEstadoConexionConRetraso(fn, delayMs) {
             if (debounceConexionTimer) clearTimeout(debounceConexionTimer);
             debounceConexionTimer = setTimeout(fn, delayMs);
         }
         window.addEventListener('offline', () => {
-            actualizarEstadoConexionConRetraso(() => setSyncText('📴 Sin conexión (guardando local)', 'offline'), 1500);
+            actualizarEstadoConexionConRetraso(revisarConexionReal, 1500);
         });
         window.addEventListener('online', () => {
-            actualizarEstadoConexionConRetraso(() => {
-                setSyncText('🔄 Reconectando...', 'connecting');
-                // Verificación de respaldo: normalmente las escuchas de Firestore (más arriba)
-                // confirman solas el "Sincronizado" en cuanto el servidor responde. Pero si eso
-                // tarda o no llega (por ejemplo, con varias pestañas de la app abiertas a la vez
-                // compitiendo por la misma conexión), esto evita que el texto se quede pegado en
-                // "Reconectando..." para siempre: si después de unos segundos ya hay sesión y
-                // señal, confirma "Sincronizado" de todas formas.
-                setTimeout(() => {
-                    if (auth.currentUser && typeof navigator !== 'undefined' && navigator.onLine !== false) {
-                        setSyncText('🟢 Sincronizado', 'synced');
-                    }
-                }, 6000);
-            }, 1500);
+            actualizarEstadoConexionConRetraso(revisarConexionReal, 1500);
         });
 
         // ===== REGISTRO DEL SERVICE WORKER (PWA) =====
