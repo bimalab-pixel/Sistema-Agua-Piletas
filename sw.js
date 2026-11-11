@@ -15,6 +15,7 @@ const APP_SHELL = [
     './caja.html',
     './offline.html',
     './manifest.json',
+    './storage-shim.js',
     './html2pdf.bundle.min.js',
     './icons/icon-48.png',
     './icons/icon-72.png',
