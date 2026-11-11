@@ -17,6 +17,22 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" href="icons/icon-180.png">
 
+    <!-- Almacenamiento en IndexedDB (sin el límite de 5 MB de localStorage). Debe ir antes de los demás scripts. -->
+    <script src="storage-shim.js"></script>
+    <script>
+    /* Respaldo: si storage-shim.js no cargó, ejecutar la app tal cual con el localStorage normal. */
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.StorageShim) return;
+        console.warn('storage-shim.js no cargó: se usa localStorage nativo');
+        document.querySelectorAll('script[type="text/plain"][data-after-storage]').forEach(function (n) {
+            var s = document.createElement('script');
+            if (n.hasAttribute('data-module')) s.type = 'module';
+            s.textContent = n.textContent;
+            n.parentNode.insertBefore(s, n);
+            n.parentNode.removeChild(n);
+        });
+    });
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -1216,7 +1232,7 @@
 
 </div><!-- /#app-content -->
 
-    <script>
+    <script type="text/plain" data-after-storage>
         let usuarios = JSON.parse(localStorage.getItem('agua_usuarios')) || [];
         let recibos = JSON.parse(localStorage.getItem('agua_recibos')) || [];
 
@@ -5129,7 +5145,7 @@
     <!-- ============================================================
          ☁️ MÓDULO FIREBASE: autenticación + sincronización en tiempo real
          ============================================================ -->
-    <script type="module">
+    <script type="text/plain" data-after-storage data-module="1">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import {
             getAuth, onAuthStateChanged, signInAnonymously,
