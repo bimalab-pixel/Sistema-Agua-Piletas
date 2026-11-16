@@ -1007,6 +1007,17 @@
 
         <button type="button" class="btn btn-outline" style="width:100%; margin-bottom:20px;" onclick="mostrarDiagnosticoCuadre()">🔍 Verificar por qué no cuadra con Recaudación</button>
 
+        <div style="background:#fff8e1; border-radius:10px; padding:12px; margin-bottom:20px;">
+            <strong style="color:#e65100; font-size:0.92rem;">🧾 Tickets cobrados del día</strong>
+            <div style="font-size:0.78rem; color:#666; margin:4px 0 8px;">Recibos que ya pagaron los usuarios en la fecha elegida. El PDF sale con 6 tickets por página.</div>
+            <input type="date" id="tk-dia-fecha" style="margin-bottom:8px;" onchange="refrescarVistaTicketsDia()">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <button type="button" id="tk-dia-btn-ver" class="btn btn-outline" style="margin:0;" onclick="verTicketsCobradosDia()">👁️ Ver</button>
+                <button type="button" class="btn btn-primary" style="margin:0;" onclick="descargarPDFTicketsCobradosDia()">⬇️ Descargar PDF</button>
+            </div>
+            <div id="tk-dia-panel" style="display:none; margin-top:10px;"></div>
+        </div>
+
         <div id="cont-detalle-panel" style="display:none; margin-bottom:20px; border-radius:10px; overflow:hidden; border:1px solid #eee;">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:#f5f5f5; gap:10px;">
                 <strong id="cont-detalle-titulo" style="font-size:0.92rem; flex:1;"></strong>
@@ -1803,7 +1814,7 @@
             }
 
             // Si llegamos aquí, la navegación es directa o la contraseña fue correcta
-            if(id === 'contabilidad') { cargarFiltrosContabilidad(); actualizarResumenContable(); }
+            if(id === 'contabilidad') { cargarFiltrosContabilidad(); actualizarResumenContable(); if (typeof inicializarTicketsDia === 'function') inicializarTicketsDia(); }
             if(id === 'fondos-calle') { cargarFiltrosFondosCalle(); }
         }
 
@@ -4151,6 +4162,267 @@
             }
         }
 
+
+        // ===== TICKETS COBRADOS DEL DÍA (ver + PDF con 3 por página) =====
+        // Reconstruye un ticket por cada PAGO hecho ese día: los recibos que se pagaron juntos
+        // (mismo usuario y misma hora de pago) forman un solo ticket, igual que el ticket
+        // que se imprime al cobrar (el recibo más nuevo + el saldo anterior de los viejos).
+        const TK_POR_PAGINA = 6;
+        function tkEsc(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        function tkNormFecha(s) {
+            // Acepta "d/m/aaaa" o "aaaa-mm-dd" y devuelve un número comparable (aaaammdd).
+            const m = String(s || '').match(/(\d{1,4})\D+(\d{1,2})\D+(\d{1,4})/);
+            if (!m) return 0;
+            const a = parseInt(m[1], 10), b = parseInt(m[2], 10), c = parseInt(m[3], 10);
+            return a > 31 ? (a * 10000 + b * 100 + c) : (c * 10000 + b * 100 + a);
+        }
+        function tkHoraSeg(h) {
+            const m = String(h || '').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+            return m ? (parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3] || '0', 10)) : 0;
+        }
+        function tkHoraCorta(h) {
+            const m = String(h || '').match(/(\d{1,2}):(\d{2})/);
+            return m ? (m[1].padStart(2, '0') + ':' + m[2]) : '';
+        }
+        function inicializarTicketsDia() {
+            const el = document.getElementById('tk-dia-fecha');
+            if (el) {
+                const h = new Date();
+                el.value = h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
+            }
+            cerrarVistaTicketsDia();
+        }
+        function obtenerFechaTicketsDia() {
+            const el = document.getElementById('tk-dia-fecha');
+            let v = el && el.value ? el.value : '';
+            if (!v) {
+                const h = new Date();
+                v = h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
+            }
+            const p = v.split('-');
+            return { clave: tkNormFecha(v), texto: p[2] + '/' + p[1] + '/' + p[0] };
+        }
+        function obtenerTicketsCobradosDia(claveFecha) {
+            const pagados = recibos.filter(r => r.estado === 'pagado' && tkNormFecha(r.fechaPago) === claveFecha);
+            const grupos = {};
+            pagados.forEach(r => {
+                const k = r.usuarioId + '|' + (r.horaPago || '');
+                (grupos[k] = grupos[k] || []).push(r);
+            });
+            const tickets = Object.keys(grupos).map(k => {
+                const g = grupos[k].slice().sort((a, b) => (a.id > b.id) - (a.id < b.id));
+                const actual = g[g.length - 1];
+                const previos = g.slice(0, -1);
+                const mora = previos.reduce((acc, x) => acc + totalRecibo(x), 0);
+                const moraDetalle = previos.map(x => x.mesFacturado + ' ($' + totalRecibo(x).toFixed(2) + ')').join(', ');
+                return { r: actual, mora: mora, moraDetalle: moraDetalle, total: totalRecibo(actual) + mora };
+            });
+            tickets.sort((a, b) => tkHoraSeg(a.r.horaPago) - tkHoraSeg(b.r.horaPago));
+            return tickets;
+        }
+        // Una sola definición del ticket: la usan la vista previa y el PDF.
+        function lineasTicketCobrado(t) {
+            const r = t.r;
+            const montoMes = parseFloat(r.total) || 0;
+            const extra = parseFloat(r.extra) || 0;
+            const L = [];
+            const add = (texto, o) => L.push(Object.assign({ texto: String(texto) }, o || {}));
+            const sep = () => L.push({ sep: true });
+            const fila = (label, valor) => {
+                const v = String(valor);
+                return label + ' '.repeat(Math.max(1, 34 - label.length - v.length)) + v;
+            };
+            add('ACOMAACAP', { size: 11, bold: true, center: true });
+            add('Cantón Las Piletas, Santa Ana Este', { size: 6.5, center: true });
+            add('Distrito de Coatepeque, Santa Ana', { size: 6.5, center: true });
+            add('*** RECIBO CANCELADO ***', { size: 8.5, bold: true, center: true });
+            sep();
+            add('RECIBO DE AGUA', { size: 8.5, bold: true, center: true });
+            add('#: ' + (r.numero || 'N/A') + ' | ' + (r.fecha || ''), { center: true });
+            add('Pagado: ' + (r.fechaPago || '') + (tkHoraCorta(r.horaPago) ? ' ' + tkHoraCorta(r.horaPago) : ''), { center: true });
+            add('MES: ' + String(r.mesFacturado || '').toUpperCase(), { bold: true, center: true });
+            sep();
+            add('Cliente: ' + (r.nombre || ''), { wrap: true });
+            add('Ubicacion: ' + (r.direccion || '---'), { wrap: true });
+            add('Contador: ' + (r.contador || ''));
+            sep();
+            add('Periodo: ' + (r.periodoDesde || '---') + ' al ' + (r.periodoHasta || r.fecha || ''), { size: 6.5, wrap: true });
+            if (r.esCuotaFija) {
+                add('CUOTA FIJA (contador danado)', { bold: true });
+            } else {
+                add(fila('Lect. Actual:', r.lecturaActual), {});
+                add(fila('Lect. Anterior:', r.lecturaAnt), {});
+                add(fila('Consumo:', r.consumo + ' m3'), {});
+                add(fila('Precio m3:', '$' + (parseFloat(r.precioUnidad) || 0).toFixed(2)), {});
+            }
+            sep();
+            add(fila('Subtotal:', '$' + montoMes.toFixed(2)), {});
+            add(fila('Saldo Incluido:', '$' + t.mora.toFixed(2)), {});
+            if (t.mora > 0 && t.moraDetalle) {
+                add('Facturas vencidas: ' + t.moraDetalle.split(', ').filter(Boolean).length, { size: 6.5 });
+                add('Detalle: ' + t.moraDetalle, { size: 6.5, wrap: true });
+            }
+            if (extra > 0) {
+                add('Extra: $' + extra.toFixed(2) + (r.extraDetalle ? ' (' + r.extraDetalle + ')' : ''), { wrap: true });
+            }
+            sep();
+            add('TOTAL PAGADO', { size: 8.5, bold: true, center: true });
+            add('$' + t.total.toFixed(2), { size: 16, bold: true, center: true });
+            add('¡GRACIAS POR SU PAGO!', { size: 7.5, bold: true, center: true });
+            add('Conserve este comprobante como', { size: 6.5, center: true });
+            add('constancia de su pago.', { size: 6.5, center: true });
+            return L;
+        }
+        function dibujarTicketCobradoPDF(doc, t, x0, y0, w, esc, seco) {
+            // esc = factor de escala (si el ticket es largo se achica para que quepa en su casilla)
+            // seco = true: solo mide la altura, sin dibujar
+            esc = esc || 1;
+            const cx = x0 + w / 2, xl = x0 + 3, xr = x0 + w - 3;
+            let y = y0;
+            try {
+                const logoW = 9 * esc, logoH = logoW * 349 / 300;
+                if (!seco) doc.addImage(logoAguaDataURL(), 'PNG', cx - logoW / 2, y, logoW, logoH, 'logoAgua');
+                y += logoH + 3 * esc;
+            } catch (e) { y += 3 * esc; }
+            lineasTicketCobrado(t).forEach(l => {
+                if (l.sep) {
+                    if (!seco) { doc.setLineWidth(0.1); doc.line(xl, y - 1.6 * esc, xr, y - 1.6 * esc); }
+                    y += 2 * esc;
+                    return;
+                }
+                const size = (l.size || 7.5) * esc;
+                const gap = size * 0.48;
+                doc.setFont('courier', l.bold ? 'bold' : 'normal');
+                doc.setFontSize(size);
+                if (l.wrap) {
+                    doc.splitTextToSize(l.texto, w - 6).forEach(s => { if (!seco) doc.text(s, xl, y); y += gap; });
+                } else if (l.center) {
+                    if (!seco) doc.text(l.texto, cx, y, { align: 'center' });
+                    y += gap;
+                } else {
+                    if (!seco) doc.text(l.texto, xl, y);
+                    y += gap;
+                }
+            });
+            return y - y0;
+        }
+        function crearPDFTicketsCobradosDia(tickets, fechaTxt) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'mm', format: 'letter', orientation: 'portrait' });
+            const cols = 3, filas = 2, colW = 66, gap = 2, margenX = 6, topY = 12;
+            const altoFila = (279.4 - topY - 9) / filas;      // deja 9 mm abajo para el total
+            const porPagina = TK_POR_PAGINA;
+            const paginas = Math.ceil(tickets.length / porPagina);
+            const totalGeneral = tickets.reduce((a, t) => a + t.total, 0);
+            for (let p = 0; p < paginas; p++) {
+                if (p > 0) doc.addPage();
+                doc.setFont('courier', 'bold');
+                doc.setFontSize(8);
+                doc.text('Tickets cobrados del ' + fechaTxt + '  -  Página ' + (p + 1) + ' de ' + paginas, 107.95, 7, { align: 'center' });
+                const grupo = tickets.slice(p * porPagina, p * porPagina + porPagina);
+                for (let fila = 0; fila < filas; fila++) {
+                    const filaT = grupo.slice(fila * cols, fila * cols + cols);
+                    if (!filaT.length) break;
+                    const yFila = topY + fila * altoFila;
+                    const maxH = Math.max.apply(null, filaT.map(t => dibujarTicketCobradoPDF(doc, t, 0, 0, colW, 1, true)));
+                    const esc = Math.min(1, (altoFila - 4) / maxH);
+                    filaT.forEach((t, i) => dibujarTicketCobradoPDF(doc, t, margenX + i * (colW + gap), yFila, colW, esc, false));
+                }
+                try {
+                    doc.setLineDashPattern([1.5, 1.5], 0);
+                    doc.setLineWidth(0.15);
+                    doc.setDrawColor(150);
+                    const columnasUsadas = Math.min(cols, grupo.length);
+                    for (let i = 1; i < columnasUsadas; i++) {
+                        const x = margenX + i * (colW + gap) - gap / 2;
+                        doc.line(x, 9, x, topY + filas * altoFila);
+                    }
+                    if (grupo.length > cols) {
+                        const yc = topY + altoFila - 1;
+                        doc.line(4, yc, 211.9, yc);
+                    }
+                    doc.setLineDashPattern([], 0);
+                    doc.setDrawColor(0);
+                } catch (e) { /* si esta versión no soporta guiones, no se dibujan */ }
+                if (p === paginas - 1) {
+                    doc.setFont('courier', 'bold');
+                    doc.setFontSize(8);
+                    doc.text('Total cobrado: $' + totalGeneral.toFixed(2) + '  (' + tickets.length + ' ticket' + (tickets.length === 1 ? '' : 's') + ')', 107.95, 275, { align: 'center' });
+                }
+            }
+            return doc;
+        }
+        function cerrarVistaTicketsDia() {
+            const panel = document.getElementById('tk-dia-panel');
+            if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+            const b = document.getElementById('tk-dia-btn-ver');
+            if (b) b.innerHTML = '👁️ Ver';
+        }
+        function verTicketsCobradosDia() {
+            // El botón alterna: si la vista ya está abierta, la oculta.
+            const panel = document.getElementById('tk-dia-panel');
+            if (panel && panel.style.display === 'block') { cerrarVistaTicketsDia(); return; }
+            mostrarVistaTicketsDia();
+        }
+        function refrescarVistaTicketsDia() {
+            // Si cambian la fecha con la vista abierta, se actualiza sola.
+            const panel = document.getElementById('tk-dia-panel');
+            if (panel && panel.style.display === 'block') mostrarVistaTicketsDia();
+        }
+        function mostrarVistaTicketsDia() {
+            const f = obtenerFechaTicketsDia();
+            const tickets = obtenerTicketsCobradosDia(f.clave);
+            const panel = document.getElementById('tk-dia-panel');
+            if (!panel) return;
+            panel.style.display = 'block';
+            const b = document.getElementById('tk-dia-btn-ver');
+            if (b) b.innerHTML = '🙈 Ocultar';
+            if (!tickets.length) {
+                panel.innerHTML = '<div style="padding:12px; background:#fff; border-radius:8px; text-align:center; color:#666;">No hay tickets cobrados el ' + tkEsc(f.texto) + '.</div>';
+                return;
+            }
+            const total = tickets.reduce((a, t) => a + t.total, 0);
+            const paginas = Math.ceil(tickets.length / TK_POR_PAGINA);
+            let html = '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 4px; font-weight:800;">'
+                + '<span>' + tickets.length + ' ticket' + (tickets.length === 1 ? '' : 's') + ' · ' + tkEsc(f.texto) + '</span>'
+                + '<span>$' + total.toFixed(2) + '</span></div>';
+            tickets.forEach((t, i) => {
+                if (i % TK_POR_PAGINA === 0) {
+                    html += '<div style="font-weight:700; color:#e65100; margin:10px 0 4px;">Página ' + (i / TK_POR_PAGINA + 1) + ' de ' + paginas + '</div>';
+                }
+                html += '<div style="background:#fff; border:1px dashed #999; border-radius:6px; padding:8px; margin-bottom:8px; color:#000; font-family:\'Courier New\', monospace; max-width:340px; margin-left:auto; margin-right:auto;">'
+                    + '<div style="font-size:0.7rem; color:#888; margin-bottom:4px;">N° ' + (i + 1) + '</div>';
+                lineasTicketCobrado(t).forEach(l => {
+                    if (l.sep) { html += '<hr style="border:none; border-top:1px solid #000; margin:4px 0;">'; return; }
+                    const px = Math.round((l.size || 7.5) * 1.55);
+                    html += '<div style="font-size:' + px + 'px; line-height:1.25; white-space:pre-wrap; word-break:break-word;'
+                        + (l.bold ? ' font-weight:700;' : '') + (l.center ? ' text-align:center;' : '') + '">' + tkEsc(l.texto) + '</div>';
+                });
+                html += '</div>';
+            });
+            html += '<button type="button" class="btn btn-primary" style="width:100%;" onclick="descargarPDFTicketsCobradosDia()">⬇️ Descargar PDF (' + TK_POR_PAGINA + ' por página)</button>'
+                + '<button type="button" class="btn btn-outline" style="width:100%; margin-top:8px;" onclick="cerrarVistaTicketsDia()">🙈 Ocultar vista</button>';
+            panel.innerHTML = html;
+        }
+        function descargarPDFTicketsCobradosDia() {
+            const f = obtenerFechaTicketsDia();
+            const tickets = obtenerTicketsCobradosDia(f.clave);
+            if (!tickets.length) { alert('No hay tickets cobrados el ' + f.texto + '.'); return; }
+            try {
+                const doc = crearPDFTicketsCobradosDia(tickets, f.texto);
+                const filename = 'Tickets_Cobrados_' + f.texto.replace(/\//g, '-') + '.pdf';
+                if (typeof Android !== 'undefined' && Android.guardarArchivo) {
+                    Android.guardarArchivo(doc.output('datauristring'), filename, 'application/pdf');
+                } else {
+                    doc.save(filename);
+                }
+            } catch (e) {
+                console.error('Error generando PDF de tickets:', e);
+                alert('⚠️ No se pudo generar el PDF: ' + e.message);
+            }
+        }
 
         function actualizarDashboard() { document.getElementById('dash-pendientes').innerText = recibos.filter(r => r.estado === 'pendiente').length; }
          { const a = new Date().getFullYear(); document.getElementById('cont-anio').innerHTML = `<option value="${a}">${a}</option><option value="${a-1}">${a-1}</option>`; document.getElementById('cont-mes').value = new Date().getMonth() + 1; }
